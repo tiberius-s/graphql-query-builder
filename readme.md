@@ -2,15 +2,6 @@
 
 A TypeScript utility package for building optimized GraphQL queries in Apollo Federation subgraphs to prevent server-side overfetching.
 
-[![CI](https://github.com/yourusername/graphql-query-builder/actions/workflows/ci.yml/badge.svg)](https://github.com/yourusername/graphql-query-builder/actions/workflows/ci.yml)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.3+-blue.svg)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/Node.js-20+-green.svg)](https://nodejs.org/)
-[![Apollo Server](https://img.shields.io/badge/Apollo%20Server-4+-purple.svg)](https://www.apollographql.com/docs/apollo-server/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![attw](https://img.shields.io/badge/attw-✓%20Node16-brightgreen)](https://arethetypeswrong.github.io/)
-[![publint](https://img.shields.io/badge/publint-✓%20valid-brightgreen)](https://publint.dev/)
-[![codecov](https://codecov.io/gh/yourusername/graphql-query-builder/graph/badge.svg)](https://codecov.io/gh/yourusername/graphql-query-builder)
-
 ## Table of Contents
 
 - [Problem Statement](#problem-statement)
@@ -24,8 +15,6 @@ A TypeScript utility package for building optimized GraphQL queries in Apollo Fe
 - [DataSource Integration](#datasource-integration)
 - [Examples](#examples)
 - [Best Practices](#best-practices)
-- [Package Validation](#package-validation)
-- [Contributing](#contributing)
 
 ## Problem Statement
 
@@ -33,59 +22,59 @@ In Apollo Federation architectures, subgraphs often communicate with upstream RE
 
 ### Understanding Overfetching
 
-```
+```txt
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│                        THE OVERFETCHING PROBLEM                                   │
+│                        THE OVERFETCHING PROBLEM                                  │
 ├──────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                   │
-│  Client Request:              What Actually Gets Fetched:                         │
-│  ┌─────────────────┐          ┌─────────────────────────────────────────────┐    │
-│  │ {                │          │ {                                           │    │
-│  │   user(id: "1") {│   →→→    │   user(id: "1") {                           │    │
-│  │     email        │          │     id                    ← Not requested   │    │
-│  │   }              │          │     email                 ← Requested ✓     │    │
-│  │ }                │          │     firstName             ← Not requested   │    │
-│  └─────────────────┘          │     lastName              ← Not requested   │    │
-│                                │     phone                 ← Not requested   │    │
-│                                │     address { ... }       ← Not requested   │    │
-│                                │     settings { ... }      ← Not requested   │    │
-│                                │     preferences { ... }   ← Not requested   │    │
-│                                │   }                                         │    │
-│                                │ }                                           │    │
-│                                └─────────────────────────────────────────────┘    │
-│                                                                                   │
-│  Result: 90% of data transferred is WASTED                                        │
+│                                                                                  │
+│  Client Request:              What Actually Gets Fetched:                        │
+│  ┌──────────────────┐          ┌─────────────────────────────────────────────┐   │
+│  │ {                │          │ {                                           │   │
+│  │   user(id: "1") {│   →→→    │   user(id: "1") {                           │   │
+│  │     email        │          │     id                    ← Not requested   │   │
+│  │   }              │          │     email                 ← Requested ✓     │   │
+│  │ }                │          │     firstName             ← Not requested   │   │
+│  └──────────────────┘          │     lastName              ← Not requested   │   │
+│                                │     phone                 ← Not requested   │   │
+│                                │     address { ... }       ← Not requested   │   │
+│                                │     settings { ... }      ← Not requested   │   │
+│                                │     preferences { ... }   ← Not requested   │   │
+│                                │   }                                         │   │
+│                                │ }                                           │   │
+│                                └─────────────────────────────────────────────┘   │
+│                                                                                  │
+│  Result: 90% of data transferred is WASTED                                       │
 │  Impact: ↑ Latency  ↑ Bandwidth  ↑ Memory  ↑ Cost                                │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Why This Happens
 
-```
+```txt
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           TYPICAL RESOLVER PATTERN                               │
+│                           TYPICAL RESOLVER PATTERN                              │
 ├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   // The problem: Hard-coded query with ALL fields                               │
-│   const resolvers = {                                                            │
-│     Query: {                                                                     │
-│       user: async (_, { id }) => {                                               │
-│         // ❌ Always fetches everything, regardless of what client asked for     │
-│         return await fetch(`/api/users/${id}`)  // Returns 50+ fields            │
-│       }                                                                          │
-│     }                                                                            │
-│   }                                                                              │
-│                                                                                  │
-│   // What we need: Dynamic query based on client request                         │
-│   const resolvers = {                                                            │
-│     Query: {                                                                     │
+│                                                                                 │
+│   // The problem: Hard-coded query with ALL fields                              │
+│   const resolvers = {                                                           │
+│     Query: {                                                                    │
+│       user: async (_, { id }) => {                                              │
+│         // ❌ Always fetches everything, regardless of what client asked for.   |
+│         return await fetch(`/api/users/${id}`)  // Returns 50+ fields           │
+│       }                                                                         │
+│     }                                                                           │
+│   }                                                                             │
+│                                                                                 │
+│   // What we need: Dynamic query based on client request                        │
+│   const resolvers = {                                                           │
+│     Query: {                                                                    │
 │       user: async (_, { id }, context, info) => {  // 👈 Use `info`!            │
 │         const fields = extractFieldsFromInfo(info)  // ✅ Extract requested     │
 │         return await fetchUserWithFields(id, fields) // ✅ Fetch only those     │
-│       }                                                                          │
-│     }                                                                            │
-│   }                                                                              │
-│                                                                                  │
+│       }                                                                         │
+│     }                                                                           │
+│   }                                                                             │
+│                                                                                 │
 └─────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -127,30 +116,6 @@ sequenceDiagram
     Gateway-->>Client: { user: { email: "..." } }
 ```
 
-### Before vs After Comparison
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                         BANDWIDTH & LATENCY IMPACT                               │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   WITHOUT Query Builder:                 WITH Query Builder:                     │
-│   ┌─────────────────────────┐           ┌─────────────────────────┐             │
-│   │ Request:  SELECT *      │           │ Request:  email only    │             │
-│   │ Response: 10,240 bytes  │    →→→    │ Response: 128 bytes     │             │
-│   │ Latency:  245ms         │           │ Latency:  52ms          │             │
-│   │ Memory:   High          │           │ Memory:   Minimal       │             │
-│   └─────────────────────────┘           └─────────────────────────┘             │
-│                                                                                  │
-│   Improvement:                                                                   │
-│   ├── 98% reduction in response size                                            │
-│   ├── 79% reduction in latency                                                  │
-│   ├── Lower memory pressure on all services                                     │
-│   └── Reduced cloud egress costs                                                │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
 ## Solution Overview
 
 This package solves the overfetching problem by:
@@ -165,7 +130,7 @@ This package solves the overfetching problem by:
 - 🎯 **Precise Field Extraction** - Only request what the client needs
 - 🔒 **OWASP Security Compliance** - Built-in protection against GraphQL attacks
 - 🔄 **Dual Module Support** - Works with both ESM and CommonJS
-- ⚙️ **Config-Based** - Uses `node-config` for flexible configuration
+- ⚙️ **Config-Based** - Can use `node-config` for flexible configuration
 - 🔌 **DataSource Integration** - Ready-to-use Apollo DataSource classes
 - 📝 **TypeScript First** - Full type safety with comprehensive types
 
@@ -204,68 +169,34 @@ flowchart TB
     style DS fill:#bbf,stroke:#333,stroke-width:2px
 ```
 
-### Package Module Structure
-
-```mermaid
-flowchart LR
-    subgraph "graphql-query-builder"
-        direction TB
-        I[index.ts]
-        E[extractor.ts]
-        B[builder.ts]
-        S[security.ts]
-        D[datasource.ts]
-        CF[config.ts]
-        T[types.ts]
-    end
-
-    I --> E
-    I --> B
-    I --> S
-    I --> D
-    I --> CF
-
-    E --> T
-    B --> T
-    S --> T
-    D --> T
-    D --> E
-    D --> B
-    D --> S
-    D --> CF
-
-    style I fill:#f96,stroke:#333
-    style T fill:#9cf,stroke:#333
-```
-
 ### Module Responsibility Matrix
 
-```
+```txt
 ┌────────────────────────────────────────────────────────────────────────────────┐
-│                        MODULE RESPONSIBILITIES                                  │
+│                        MODULE RESPONSIBILITIES                                 │
 ├─────────────────┬──────────────────────────────────────────────────────────────┤
 │ Module          │ Purpose                                                      │
 ├─────────────────┼──────────────────────────────────────────────────────────────┤
-│ extractor.ts    │ Parse GraphQL AST from resolver `info` argument             │
+│ extractor.ts    │ Parse GraphQL AST from resolver `info` argument              │
 │                 │ Extract field selections with depth/path information         │
 ├─────────────────┼──────────────────────────────────────────────────────────────┤
-│ builder.ts      │ Convert field selections into GraphQL query strings         │
-│                 │ Handle variables, operation names, field mappings           │
+│ builder.ts      │ Convert field selections into GraphQL query strings          │
+│                 │ Handle variables, operation names, field mappings            │
 ├─────────────────┼──────────────────────────────────────────────────────────────┤
-│ security.ts     │ OWASP-compliant validation (depth, field count, blocked)    │
-│                 │ Sanitize field selections, remove dangerous fields          │
+│ security.ts     │ OWASP-compliant validation (depth, field count, blocked)     │
+│                 │ Sanitize field selections, remove dangerous fields           │
 ├─────────────────┼──────────────────────────────────────────────────────────────┤
-│ datasource.ts   │ Apollo Server 4 DataSource base classes                     │
-│                 │ Orchestrate extraction → building → validation → HTTP       │
+│ datasource.ts   │ Apollo Server 4 DataSource base classes                      │
+│                 │ Orchestrate extraction → building → validation → HTTP        │
 ├─────────────────┼──────────────────────────────────────────────────────────────┤
-│ config.ts       │ node-config integration for runtime configuration           │
-│                 │ Service endpoint management, security defaults              │
+│ config.ts       │ node-config-like integration for runtime configuration            │
+│                 │ Service endpoint management, security defaults               │
 ├─────────────────┼──────────────────────────────────────────────────────────────┤
-│ errors.ts       │ Custom error types with rich metadata                       │
-│                 │ ConfigurationError, QueryValidationError, etc.              │
+│ errors.ts       │ Custom error types with rich metadata                        │
+│                 │ ConfigurationError, QueryValidationError, etc.               │
 ├─────────────────┼──────────────────────────────────────────────────────────────┤
-│ factories.ts    │ Factory functions for creating DataSource instances         │
-│                 │ Per-request instantiation patterns                          │
+│ factories.ts    │ Factory functions for creating DataSource instances          │
+│                 │ Per-request instantiation patterns                           │
 └─────────────────┴──────────────────────────────────────────────────────────────┘
 ```
 
@@ -276,7 +207,7 @@ flowchart LR
     subgraph Extraction
         INFO[GraphQLResolveInfo]
         EXT[extractFieldsFromInfo]
-        FS[FieldSelection[]]
+        FS["FieldSelection[]"]
     end
 
     subgraph Building
@@ -305,73 +236,10 @@ flowchart LR
     style VAL fill:#f99,stroke:#333
 ```
 
-### Data Flow - Detailed Pipeline
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                           DATA TRANSFORMATION PIPELINE                           │
-├─────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                  │
-│   1. EXTRACTION PHASE                                                            │
-│   ┌──────────────────────────────────────────────────────────────────────┐      │
-│   │ Input: GraphQL AST from resolver `info` argument                      │      │
-│   │                                                                       │      │
-│   │   info.fieldNodes → parseResolveInfo() → FieldSelection[]            │      │
-│   │                                                                       │      │
-│   │ Output: [                                                             │      │
-│   │   { name: 'id', path: ['user', 'id'], depth: 1 },                    │      │
-│   │   { name: 'email', path: ['user', 'email'], depth: 1 },              │      │
-│   │   { name: 'profile', path: ['user', 'profile'], depth: 1,            │      │
-│   │     children: [{ name: 'avatar', ... }] }                            │      │
-│   │ ]                                                                     │      │
-│   └──────────────────────────────────────────────────────────────────────┘      │
-│                              ↓                                                   │
-│   2. BUILDING PHASE                                                              │
-│   ┌──────────────────────────────────────────────────────────────────────┐      │
-│   │ Input: FieldSelection[] + QueryBuildOptions                           │      │
-│   │                                                                       │      │
-│   │   buildQuery('user', fields, { variables: { id: '123' } })           │      │
-│   │                                                                       │      │
-│   │ Output: {                                                             │      │
-│   │   query: 'query GetUser($id: ID!) { user(id: $id) { id email } }',   │      │
-│   │   variables: { id: '123' },                                          │      │
-│   │   metadata: { depth: 2, fieldCount: 3 }                              │      │
-│   │ }                                                                     │      │
-│   └──────────────────────────────────────────────────────────────────────┘      │
-│                              ↓                                                   │
-│   3. VALIDATION PHASE                                                            │
-│   ┌──────────────────────────────────────────────────────────────────────┐      │
-│   │ Input: BuiltQuery metadata + SecurityConfig                           │      │
-│   │                                                                       │      │
-│   │   validateQuery(3, 2, ['id', 'email'], { maxDepth: 10 })             │      │
-│   │                                                                       │      │
-│   │ Output: { valid: true, errors: [] }                                  │      │
-│   │    OR   { valid: false, errors: ['Depth 12 exceeds max 10'] }        │      │
-│   └──────────────────────────────────────────────────────────────────────┘      │
-│                              ↓                                                   │
-│   4. EXECUTION PHASE                                                             │
-│   ┌──────────────────────────────────────────────────────────────────────┐      │
-│   │ Input: Validated BuiltQuery                                           │      │
-│   │                                                                       │      │
-│   │   HTTP POST to upstream GraphQL service                               │      │
-│   │   Headers: Content-Type, Authorization, custom headers                │      │
-│   │                                                                       │      │
-│   │ Output: Parsed JSON response data                                     │      │
-│   └──────────────────────────────────────────────────────────────────────┘      │
-│                                                                                  │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
-
 ## Installation
 
 ```bash
 npm install graphql-query-builder
-```
-
-### Peer Dependencies
-
-```bash
-npm install graphql config
 ```
 
 ## Quick Start
@@ -448,9 +316,45 @@ const resolvers = {
 
 ## Configuration
 
-### Using node-config
+### Programmatic Configuration (Recommended)
 
-Create a configuration file in your `config/` directory:
+```typescript
+import { setConfig, registerUpstreamService } from 'graphql-query-builder';
+
+// Set all configuration
+setConfig({
+  maxDepth: 10,
+  maxFields: 100,
+  blockedFields: ['password'],
+  upstreamServices: {
+    userService: {
+      endpoint: 'https://users.example.com/graphql',
+    },
+  },
+});
+
+// Or register services individually
+registerUpstreamService('orderService', {
+  endpoint: 'https://orders.example.com/graphql',
+  timeout: 15000,
+});
+```
+
+### Using node-config (Optional)
+
+If you're already using the `node-config` package, you can integrate with it:
+
+```typescript
+import config from 'config';
+import { initializeConfig, createNodeConfigProvider } from 'graphql-query-builder';
+
+// Create a provider that wraps node-config
+initializeConfig({
+  provider: createNodeConfigProvider(config),
+});
+```
+
+Then create a configuration file in your `config/` directory:
 
 ```json
 // config/default.json
@@ -477,30 +381,6 @@ Create a configuration file in your `config/` directory:
     }
   }
 }
-```
-
-### Programmatic Configuration
-
-```typescript
-import { setConfig, registerUpstreamService } from 'graphql-query-builder';
-
-// Set all configuration
-setConfig({
-  maxDepth: 10,
-  maxFields: 100,
-  blockedFields: ['password'],
-  upstreamServices: {
-    userService: {
-      endpoint: 'https://users.example.com/graphql',
-    },
-  },
-});
-
-// Or register services individually
-registerUpstreamService('orderService', {
-  endpoint: 'https://orders.example.com/graphql',
-  timeout: 15000,
-});
 ```
 
 ### Environment Variables
@@ -801,6 +681,10 @@ See the [examples](./examples) directory for complete examples:
 - [Basic Usage](./examples/basic-usage.ts) - Field extraction and query building
 - [DataSource Integration](./examples/datasource-integration.ts) - Apollo Server integration
 - [Security Configuration](./examples/security-configuration.ts) - OWASP compliance
+- [Performance Optimization](./examples/performance-optimization.ts) - Query and AST caching
+- [Configuration](./examples/configuration.ts) - Environment variables, custom providers
+- [Use Cases](./examples/use-cases.ts) - Real-world patterns (Federation, BFF, multi-tenant)
+- [Framework Integration](./examples/framework-integration.ts) - Apollo, NestJS, Yoga, Fastify
 
 ## Best Practices
 
@@ -855,52 +739,16 @@ if (complexity > threshold) {
 }
 ```
 
-## Package Validation
-
-This package is validated for compatibility across different module resolutions using industry-standard tools.
-
-### Validation Results
-
-```
-┌───────────────────┬──────────────────────────┐
-│ Resolution        │ Status                   │
-├───────────────────┼──────────────────────────┤
-│ node10            │ ✅ Compatible            │
-│ node16 (from CJS) │ ✅ Compatible (CJS)      │
-│ node16 (from ESM) │ ✅ Compatible (ESM)      │
-│ bundler           │ ✅ Compatible            │
-└───────────────────┴──────────────────────────┘
-```
-
-### Running Validation
-
-```bash
-# Validate with both attw and publint
-npm run validate
-
-# Or run individually
-npx attw --pack .
-npx publint
-```
-
 ### Dual Module Support Architecture
 
-```
+```txt
 dist/
-├── esm/                    # ES Modules (.js)
-│   ├── index.js
-│   ├── extractor.js
-│   ├── builder.js
-│   └── ...
-├── cjs/                    # CommonJS (.cjs)
-│   ├── index.cjs
-│   ├── extractor.cjs
-│   ├── builder.cjs
-│   └── ...
-└── types/                  # Type Declarations
-    ├── index.d.ts          # For ESM consumers
-    ├── index.d.cts         # For CJS consumers
-    └── ...
+├── index.js            # ES Module entry
+├── index.js.map        # ESM source map
+├── index.cjs           # CommonJS entry
+├── index.cjs.map       # CJS source map
+├── index.d.ts          # TypeScript declarations (ESM)
+└── index.d.cts         # TypeScript declarations (CJS)
 ```
 
 ## Module Formats
@@ -929,14 +777,6 @@ import type {
   QueryBuilderConfig,
 } from 'graphql-query-builder';
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
 
 ### Development Setup
 
