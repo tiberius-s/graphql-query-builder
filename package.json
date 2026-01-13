@@ -43,7 +43,6 @@
     "check": "biome check src",
     "check:fix": "biome check --write src",
     "typecheck": "tsc --noEmit",
-    "typecheck:examples": "tsc --noEmit -p examples/tsconfig.json",
     "validate": "npm run build && attw --pack . && publint",
     "prepublishOnly": "npm run validate"
   },
