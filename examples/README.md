@@ -1,82 +1,117 @@
 # graphql-query-builder Examples
 
-This folder contains comprehensive examples demonstrating how to use the graphql-query-builder library.
+Welcome to the examples and tutorials for `graphql-query-builder`! This directory contains comprehensive guides designed for developers getting started with GraphQL optimization.
 
-## Examples Overview
+---
 
-### [basic-usage.ts](./basic-usage.ts)
+## 🚀 Quick Start
 
-Core functionality examples including:
+New to the library? Start here:
 
-- Extracting fields from GraphQL resolve info
-- Building GraphQL queries from field selections
-- Using field path strings
+1. **[Basic Usage](./basic-usage/basic-usage.md)** - Learn the fundamentals of field extraction and query building
+2. **[DataSource Integration](./datasource-integration/datasource-integration.md)** - Integrate with Apollo Server
+3. **[Security Configuration](./security-configuration/security-configuration.md)** - Protect your API
 
-### [datasource-integration.ts](./datasource-integration.ts)
+---
 
-Data source patterns including:
+## 📚 Tutorial Index
 
-- Using `GraphQLDataSource` base class
-- Creating custom data sources
-- Service configuration and registration
+### Getting Started
 
-### [security-configuration.ts](./security-configuration.ts)
+| Tutorial                                          | Description                                | Difficulty |
+| ------------------------------------------------- | ------------------------------------------ | ---------- |
+| [Basic Usage](./basic-usage/basic-usage.md)       | Extract fields and build optimized queries | Beginner   |
+| [Configuration](./configuration/configuration.md) | Environment variables, providers, services | Beginner   |
 
-Security patterns including:
+### Integration Guides
 
-- Field blocking and sanitization
-- Query depth and complexity limits
-- Field validation
+| Tutorial                                                                     | Description                      | Difficulty   |
+| ---------------------------------------------------------------------------- | -------------------------------- | ------------ |
+| [DataSource Integration](./datasource-integration/datasource-integration.md) | Apollo Server 4 data sources     | Intermediate |
+| [Framework Integration](./framework-integration/framework-integration.md)    | NestJS, Yoga, Mercurius, AppSync | Intermediate |
 
-### [performance-optimization.ts](./performance-optimization.ts)
+### Security & Performance
 
-Performance patterns including:
+| Tutorial                                                                           | Description                              | Difficulty   |
+| ---------------------------------------------------------------------------------- | ---------------------------------------- | ------------ |
+| [Security Configuration](./security-configuration/security-configuration.md)       | Field blocking, depth limits, validation | Intermediate |
+| [Performance Optimization](./performance-optimization/performance-optimization.md) | Query caching, AST caching, warmup       | Intermediate |
 
-- Query string caching setup
-- AST caching setup
-- Cache warmup strategies
-- Monitoring cache statistics
+### Advanced Patterns
 
-### [configuration.ts](./configuration.ts)
+| Tutorial                                             | Description                                             | Difficulty |
+| ---------------------------------------------------- | ------------------------------------------------------- | ---------- |
+| [Schema Mapping](./schema-mapping/schema-mapping.md) | Translate between service and upstream schemas with Zod | Advanced   |
+| [Use Cases](./use-cases/use-cases.md)                | Federation, BFF, multi-tenant, rate limiting            | Advanced   |
 
-Configuration patterns including:
+---
 
-- Environment variable configuration
-- Custom configuration providers
-- AWS Parameter Store integration
-- Node-config integration
-- Dynamic service registration
+## 🎯 Learn by Use Case
 
-### [use-cases.ts](./use-cases.ts)
+### "I want to prevent overfetching in my resolvers"
 
-Real-world use case examples including:
+→ Start with [Basic Usage](./basic-usage/basic-usage.md), then [DataSource Integration](./datasource-integration/datasource-integration.md)
 
-- Apollo Federation subgraph optimization
-- BFF (Backend for Frontend) pattern
-- Multi-tenant SaaS applications
-- Rate-limited external APIs
-- Schema stitching gateways
-- Event-sourced microservices
-- Security-first APIs
-- Field-based response caching
-- Testing and mocking
-- Performance monitoring
+### "I need to secure my GraphQL API"
 
-### [framework-integration.ts](./framework-integration.ts)
+→ Read [Security Configuration](./security-configuration/security-configuration.md)
 
-Framework integration patterns including:
+### "I want to maximize performance"
 
-- Apollo Server 4
-- Express GraphQL
-- NestJS
-- GraphQL Yoga
-- Mercurius (Fastify)
-- AWS AppSync Lambda
-- Testing with Jest/Vitest
-- DataDog APM integration
-- Prometheus metrics
+→ Check out [Performance Optimization](./performance-optimization/performance-optimization.md)
 
-## Quick Start
+### "My upstream schema differs from my API schema"
+
+→ See [Schema Mapping](./schema-mapping/schema-mapping.md) for Zod-based transformations
+
+### "I'm using Apollo Federation"
+
+→ Look at [Use Cases - Federation](./use-cases/use-cases.md#use-case-1-apollo-federation-subgraph)
+
+### "I'm building a BFF (Backend for Frontend)"
+
+→ See [Use Cases - BFF Pattern](./use-cases/use-cases.md#use-case-2-bff-backend-for-frontend)
+
+### "I'm using NestJS / Yoga / Fastify"
+
+→ Check [Framework Integration](./framework-integration/framework-integration.md)
+
+---
+
+## 📁 Directory Structure
+
+```
+examples/
+├── README.md                    # This file
+├── basic-usage/
+│   ├── basic-usage.md          # Tutorial
+│   └── basic-usage.ts          # Code examples
+├── configuration/
+│   ├── configuration.md        # Tutorial
+│   └── configuration.ts        # Code examples
+├── datasource-integration/
+│   ├── datasource-integration.md
+│   └── datasource-integration.ts
+├── framework-integration/
+│   ├── framework-integration.md
+│   └── framework-integration.ts
+├── performance-optimization/
+│   ├── performance-optimization.md
+│   └── performance-optimization.ts
+├── schema-mapping/
+│   ├── schema-mapping.md       # Tutorial
+│   └── schema-mapping.ts       # Code examples
+├── security-configuration/
+│   ├── security-configuration.md
+│   └── security-configuration.ts
+└── use-cases/
+    ├── use-cases.md
+    └── use-cases.ts
+```
+
+---
+
+## 💡 Quick Code Example
 
 ```typescript
 import {
@@ -113,52 +148,28 @@ async function userResolver(
   context: unknown,
   info: GraphQLResolveInfo,
 ) {
+  // Automatically extracts only requested fields
+  // and builds an optimized upstream query
   return dataSource.executeQuery('user', { id: args.id }, info);
 }
 ```
 
-## Running Examples
+---
 
-These examples are TypeScript files that demonstrate API usage patterns. They're designed to be read and referenced, not executed directly.
+## 🔗 Related Resources
 
-To use these patterns in your project:
+- [Package README](../readme.md)
+- [API Reference](../readme.md#api-reference)
 
-1. Install the library:
+---
 
-   ```bash
-   npm install graphql-query-builder
-   ```
+## 🤝 Contributing
 
-2. Copy relevant patterns from these examples into your codebase
+Found an issue with the examples? Have a use case we should cover?
 
-3. Adapt the patterns to your specific use case
+1. Open an issue describing what's missing
+2. Submit a PR with your example or improvement
 
-## Key Concepts
+---
 
-### Field Extraction
-
-The `extractFieldsFromInfo` function analyzes the GraphQL resolve info to determine exactly which fields were requested by the client. This is the foundation for preventing over-fetching.
-
-### Query Building
-
-The `buildQuery` and `buildQueryCached` functions construct GraphQL query strings from field selections. The cached version provides significant performance benefits for repeated queries.
-
-### Data Sources
-
-Data source classes encapsulate the logic for communicating with upstream GraphQL services. They handle authentication, error handling, and query execution.
-
-### Caching
-
-Two levels of caching are available:
-
-- **Query String Cache**: Caches the generated GraphQL query strings
-- **AST Cache**: Caches parsed GraphQL ASTs for validation
-
-### Security
-
-Built-in security features include:
-
-- Field blocking (preventing access to sensitive fields)
-- Depth limiting (preventing deeply nested queries)
-- Field count limiting (preventing overly broad queries)
-- Field validation and sanitization
+_Happy querying! 🚀_
