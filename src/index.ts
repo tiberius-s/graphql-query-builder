@@ -1,190 +1,70 @@
 /**
  * graphql-query-builder
  *
- * A TypeScript utility package for building optimized GraphQL queries
- * in Apollo Federation subgraphs to prevent server-side overfetching.
+ * A focused library for building optimized GraphQL queries from field selections.
+ * Designed for use in GraphQL server-to-server communication where the upstream
+ * is also a GraphQL endpoint.
  *
- * @packageDocumentation
+ * The core workflow:
+ * 1. Extract fields from client request using extractFieldsFromInfo()
+ * 2. Build optimized upstream query using buildQuery() or buildQueryCached()
+ * 3. Send the optimized query to the upstream GraphQL service
  *
  * @example
  * ```typescript
- * import {
- *   extractFieldsFromInfo,
- *   buildQuery,
- *   GraphQLDataSource,
- *   QueryBuilderFactory,
- * } from 'graphql-query-builder';
+ * import { extractFieldsFromInfo, buildQuery, configure } from 'graphql-query-builder';
  *
- * // Using the factory pattern (recommended)
- * const factory = new QueryBuilderFactory();
- * const builder = factory.forService('userService');
+ * // Configure once at startup
+ * configure({
+ *   maxDepth: 10,
+ *   blockedFields: ['password', 'ssn'],
+ * });
  *
- * const resolvers = {
- *   Query: {
- *     user: async (_, args, context, info) => {
- *       // One-liner to extract and build
- *       const { query, variables } = builder.extractAndBuild(info, 'user', { id: args.id });
- *       return context.dataSources.userService.executeQuery(query, variables);
- *     },
- *   },
+ * // In your resolver
+ * const resolver = async (parent, args, context, info) => {
+ *   const { fields } = extractFieldsFromInfo(info);
+ *   const { query, variables } = buildQuery('user', fields, {
+ *     operationName: 'GetUser',
+ *     variables: { id: args.id },
+ *   });
+ *   // Send query to upstream service
  * };
  * ```
  */
 
-// ============================================================================
-// Types (re-exported from their defining modules)
-// ============================================================================
+// === Field Extraction ===
+export type { ExtractedFields, ExtractionOptions, FieldSelection } from './extractor.js';
+export { extractFieldsFromInfo, getRequestedFieldNames, isFieldRequested } from './extractor.js';
 
-export type {
-  BuiltQuery,
-  // Query building types
-  QueryBuildOptions,
-  ValidationResult,
-} from './builder.js';
-export type {
-  // Configuration types
-  CacheConfig,
-  ConfigInitOptions,
-  ConfigProvider,
-  QueryBuilderConfig,
-  UpstreamServiceConfig,
-} from './config.js';
-export type {
-  // DataSource types
-  GraphQLDataSourceOptions,
-  QueryBuilderContext,
-} from './datasource.js';
-// Custom errors
-export { ConfigurationError, QueryValidationError, UpstreamServiceError } from './errors.js';
-export type {
-  ExtractedFields,
-  ExtractionOptions,
-  // Field extraction types
-  FieldSelection,
-} from './extractor.js';
-
-// Type guard (backward compatibility)
-export { isFieldNode } from './types.js';
-
-// ============================================================================
-// Field Extraction
-// ============================================================================
-
+// === Query Building ===
+export type { BuiltQuery, QueryBuildOptions } from './builder.js';
 export {
-  extractFieldsFromInfo,
-  getFieldStructure,
-  getRequestedFieldNames,
-  isFieldRequested,
-} from './extractor.js';
-
-// ============================================================================
-// Query Building
-// ============================================================================
-
-export {
-  buildMutation,
   buildQuery,
   buildQueryCached,
   buildQueryFromPaths,
   buildQueryFromPathsCached,
-  buildSelectionSetFromPaths,
 } from './builder.js';
 
-// ============================================================================
-// Query Cache (Performance Optimization)
-// ============================================================================
-
-export type { CacheStats, QueryCacheConfig } from './cache.js';
+// === Configuration & Validation ===
+export type { QueryBuilderConfig, ValidationOptions, ValidationResult } from './config.js';
 export {
-  clearQueryCache,
-  disableQueryCache,
-  generateCacheKey,
-  getCachedQuery,
-  getQueryCacheStats,
-  initializeQueryCache,
-  isQueryCacheEnabled,
-  setCachedQuery,
-} from './cache.js';
-
-// ============================================================================
-// AST Cache (Performance Optimization)
-// ============================================================================
-
-export type { ASTCacheConfig, ASTCacheStats, SyntaxValidationResult } from './ast-cache.js';
-export {
-  clearASTCache,
-  disableASTCache,
-  getASTCacheStats,
-  getCachedAST,
-  initializeASTCache,
-  isASTCacheEnabled,
-  parseQueryCached,
-  parseQueryOrThrow,
-  preloadQueries,
-  setCachedAST,
-  validateBuiltQuerySyntax,
-  validateQuerySyntax,
-} from './ast-cache.js';
-
-// ============================================================================
-// Security
-// ============================================================================
-
-export type { SecurityConfig } from './security.js';
-export {
-  assertQueryValid,
-  calculateComplexity,
-  createSecurityMiddleware,
-  DEFAULT_SECURITY_CONFIG,
-  getBlockedFields,
-  isFieldAllowed,
-  limitFieldDepth,
-  sanitizeFieldSelections,
-  validateFieldSelections,
-  validateQuery,
-} from './security.js';
-
-// ============================================================================
-// Configuration
-// ============================================================================
-
-export {
-  createNodeConfigProvider,
+  configure,
   getConfig,
-  getConfigFromEnv,
-  getUpstreamServiceConfig,
-  initializeConfig,
-  registerUpstreamService,
   resetConfig,
-  setConfig,
-  validateConfig,
+  validateFields,
+  assertValid,
+  sanitizeFields,
 } from './config.js';
 
-// ============================================================================
-// DataSource Integration
-// ============================================================================
-
+// === Caching ===
+export type { CacheConfig, CacheStats } from './cache.js';
 export {
-  BearerAuthDataSource,
-  createDataSourceFactory,
-  GraphQLDataSource,
-  HeaderAuthDataSource,
-  SimpleGraphQLDataSource,
-} from './datasource.js';
+  initializeCache,
+  clearCache,
+  disableCache,
+  isCacheEnabled,
+  getCacheStats,
+} from './cache.js';
 
-// ============================================================================
-// Factory Pattern
-// ============================================================================
-
-export type {
-  DataSourceFactoryOptions,
-  QueryBuilder,
-  QueryBuilderFactoryOptions,
-} from './factories.js';
-export {
-  ConfigBuilder,
-  DataSourceFactory,
-  getQueryBuilderFactory,
-  QueryBuilderFactory,
-  resetQueryBuilderFactory,
-} from './factories.js';
+// === Errors ===
+export { QueryValidationError, ConfigurationError } from './errors.js';

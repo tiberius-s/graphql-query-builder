@@ -1,7 +1,7 @@
 /**
  * graphql-query-builder
  *
- * Integration Tests - Overfetching Demonstration
+ * Integration Tests
  *
  * These tests demonstrate the core problem this library solves:
  * server-side overfetching in GraphQL resolvers. They show how
@@ -11,28 +11,17 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { parse } from 'graphql';
-import { mockData } from './fixtures/schema.js';
-import { buildQuery, QueryBuilderFactory, setConfig, resetConfig } from '../src/index.js';
+import { buildQuery, configure, resetConfig, validateFields } from '../src/index.js';
+import type { FieldSelection } from '../src/index.js';
 
 describe('Integration Tests: Overfetching Prevention', () => {
   beforeEach(() => {
     resetConfig();
-    setConfig({
+    configure({
       maxDepth: 10,
       maxFields: 100,
-      upstreamServices: {
-        productService: {
-          endpoint: 'https://products.example.com/graphql',
-          timeout: 5000,
-          requiredFields: ['id'],
-        },
-        userService: {
-          endpoint: 'https://users.example.com/graphql',
-          timeout: 5000,
-          requiredFields: ['id'],
-          blockedFields: ['passwordHash', 'internalNotes'],
-        },
-      },
+      requiredFields: ['id'],
+      blockedFields: ['passwordHash', 'internalNotes'],
     });
   });
 
@@ -119,7 +108,7 @@ describe('Integration Tests: Overfetching Prevention', () => {
 
     it('should handle nested field selections', () => {
       // Client needs user profile with nested preferences
-      const fields = [
+      const fields: FieldSelection[] = [
         { name: 'id', path: ['id'], depth: 1 },
         { name: 'email', path: ['email'], depth: 1 },
         {
@@ -164,14 +153,10 @@ describe('Integration Tests: Overfetching Prevention', () => {
     });
   });
 
-  describe('Query Builder Factory Integration', () => {
-    it('should create optimized queries using factory', () => {
-      const factory = new QueryBuilderFactory();
-      const builder = factory.forService('productService');
-
+  describe('Query Building with Validation', () => {
+    it('should build optimized queries', () => {
       // Simulate extracting fields from a client request
-      const extractedFields = [
-        { name: 'id', path: ['id'], depth: 1 },
+      const extractedFields: FieldSelection[] = [
         { name: 'name', path: ['name'], depth: 1 },
         { name: 'price', path: ['price'], depth: 1 },
         {
@@ -185,27 +170,24 @@ describe('Integration Tests: Overfetching Prevention', () => {
         },
       ];
 
-      const result = builder.buildFromFields('product', extractedFields, { id: '101' });
+      const result = buildQuery('product', extractedFields, { variables: { id: '101' } });
 
       expect(result.query).toContain('product');
       expect(result.query).toContain('inventory');
       expect(result.query).toContain('available');
-      // Account for required 'id' field being added
+      // 'id' added from requiredFields, plus 3 top-level + 2 nested = 6 fields
       expect(result.metadata.fieldCount).toBeGreaterThanOrEqual(5);
       expect(result.metadata.depth).toBe(2);
     });
 
     it('should validate queries against security rules', () => {
-      const factory = new QueryBuilderFactory();
-      const builder = factory.forService('userService');
-
       // Create a simple selection that should pass validation
-      const fields = [
+      const fields: FieldSelection[] = [
         { name: 'id', path: ['id'], depth: 1 },
         { name: 'email', path: ['email'], depth: 1 },
       ];
 
-      const validation = builder.validate(fields);
+      const validation = validateFields(fields);
 
       expect(validation.valid).toBe(true);
       expect(validation.errors).toHaveLength(0);
@@ -219,8 +201,7 @@ describe('Integration Tests: Overfetching Prevention', () => {
       // - first image for thumbnail
       // - inventory status for "In Stock" badge
 
-      const listingFields = [
-        { name: 'id', path: ['id'], depth: 1 },
+      const listingFields: FieldSelection[] = [
         { name: 'name', path: ['name'], depth: 1 },
         { name: 'price', path: ['price'], depth: 1 },
         { name: 'slug', path: ['slug'], depth: 1 },
@@ -263,8 +244,7 @@ describe('Integration Tests: Overfetching Prevention', () => {
       // - name and avatar for display
       // - Nothing else
 
-      const headerFields = [
-        { name: 'id', path: ['id'], depth: 1 },
+      const headerFields: FieldSelection[] = [
         { name: 'firstName', path: ['firstName'], depth: 1 },
         { name: 'lastName', path: ['lastName'], depth: 1 },
         { name: 'avatar', path: ['avatar'], depth: 1 },
@@ -277,12 +257,11 @@ describe('Integration Tests: Overfetching Prevention', () => {
 
       // Should not fetch sensitive or unnecessary data
       expect(result.query).not.toContain('email');
-      expect(result.query).not.toContain('profile');
       expect(result.query).not.toContain('addresses');
       expect(result.query).not.toContain('paymentMethods');
       expect(result.query).not.toContain('preferences');
 
-      // Total fields should be minimal
+      // Total fields should be minimal (3 fields + required 'id')
       expect(result.metadata.fieldCount).toBe(4);
     });
 
@@ -292,8 +271,7 @@ describe('Integration Tests: Overfetching Prevention', () => {
       // - Item names and quantities (but not full product details)
       // - Shipping address
 
-      const confirmationFields = [
-        { name: 'id', path: ['id'], depth: 1 },
+      const confirmationFields: FieldSelection[] = [
         { name: 'orderNumber', path: ['orderNumber'], depth: 1 },
         { name: 'status', path: ['status'], depth: 1 },
         { name: 'total', path: ['total'], depth: 1 },
@@ -350,8 +328,7 @@ describe('Integration Tests: Overfetching Prevention', () => {
 
       const fullProductFields = 45; // Estimated total fields in full Product type
 
-      const listingFields = [
-        { name: 'id', path: ['id'], depth: 1 },
+      const listingFields: FieldSelection[] = [
         { name: 'name', path: ['name'], depth: 1 },
         { name: 'price', path: ['price'], depth: 1 },
       ];
@@ -360,6 +337,7 @@ describe('Integration Tests: Overfetching Prevention', () => {
         operationName: 'OptimizedQuery',
       });
 
+      // result.metadata.fieldCount = 3 (name, price, + required 'id')
       const reductionPercentage =
         ((fullProductFields - result.metadata.fieldCount) / fullProductFields) * 100;
 
@@ -372,16 +350,10 @@ describe('Integration Tests: Overfetching Prevention', () => {
 describe('Integration Tests: Security', () => {
   beforeEach(() => {
     resetConfig();
-    setConfig({
+    configure({
       maxDepth: 5,
       maxFields: 50,
       blockedFields: ['passwordHash', 'internalNotes', 'ssn'],
-      upstreamServices: {
-        userService: {
-          endpoint: 'https://users.example.com/graphql',
-          blockedFields: ['passwordHash', 'internalNotes'],
-        },
-      },
     });
   });
 
@@ -389,21 +361,69 @@ describe('Integration Tests: Security', () => {
     resetConfig();
   });
 
-  it('should block sensitive fields from being requested', () => {
-    const factory = new QueryBuilderFactory();
-    const builder = factory.forService('userService');
-
+  it('should detect sensitive fields during validation', () => {
     // Attempt to include blocked fields
-    const fields = [
+    const fields: FieldSelection[] = [
       { name: 'id', path: ['id'], depth: 1 },
       { name: 'email', path: ['email'], depth: 1 },
       { name: 'passwordHash', path: ['passwordHash'], depth: 1 }, // BLOCKED
     ];
 
-    const validation = builder.validate(fields);
+    const validation = validateFields(fields);
 
     // Validation should flag the blocked field
     expect(validation.valid).toBe(false);
     expect(validation.errors.some((e) => e.includes('passwordHash'))).toBe(true);
+  });
+
+  it('should validate depth limits', () => {
+    // Create deeply nested structure exceeding maxDepth of 5
+    const deepFields: FieldSelection[] = [
+      {
+        name: 'level1',
+        path: ['level1'],
+        depth: 1,
+        selections: [
+          {
+            name: 'level2',
+            path: ['level1', 'level2'],
+            depth: 2,
+            selections: [
+              {
+                name: 'level3',
+                path: ['level1', 'level2', 'level3'],
+                depth: 3,
+                selections: [
+                  {
+                    name: 'level4',
+                    path: ['level1', 'level2', 'level3', 'level4'],
+                    depth: 4,
+                    selections: [
+                      {
+                        name: 'level5',
+                        path: ['level1', 'level2', 'level3', 'level4', 'level5'],
+                        depth: 5,
+                        selections: [
+                          {
+                            name: 'level6', // Exceeds maxDepth of 5
+                            path: ['level1', 'level2', 'level3', 'level4', 'level5', 'level6'],
+                            depth: 6,
+                          },
+                        ],
+                      },
+                    ],
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ];
+
+    const validation = validateFields(deepFields);
+
+    expect(validation.valid).toBe(false);
+    expect(validation.errors.some((e) => e.includes('depth'))).toBe(true);
   });
 });

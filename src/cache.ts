@@ -1,312 +1,140 @@
 /**
  * graphql-query-builder
  *
- * Query Cache Module
+ * Cache Module
  *
- * This module provides caching utilities to improve performance by avoiding
- * redundant query string generation for identical field selections.
- *
- * The cache uses a structural hash of field selections as the key, allowing
- * the same query structure to be reused across different requests.
+ * Provides LRU caching for built queries to avoid redundant string generation.
+ * Uses MD5 hashing for efficient cache key generation.
  */
 
+import { createHash } from 'node:crypto';
 import type { BuiltQuery, QueryBuildOptions } from './builder.js';
 import type { FieldSelection } from './extractor.js';
 
-// ============================================================================
-// Type Definitions
-// ============================================================================
-
 /**
- * Configuration for the query cache.
+ * Cache configuration options.
  */
-export interface QueryCacheConfig {
-  /** Maximum number of cached queries */
+export interface CacheConfig {
+  /** Maximum number of queries to cache (default: 1000) */
   maxSize: number;
-  /** Time-to-live in milliseconds (0 = no expiry) */
+  /** Time-to-live in milliseconds, 0 for no expiry (default: 0) */
   ttl: number;
-  /** Whether to track cache statistics */
-  trackStats: boolean;
 }
-
-/**
- * Statistics about cache performance.
- */
-export interface CacheStats {
-  /** Number of cache hits */
-  hits: number;
-  /** Number of cache misses */
-  misses: number;
-  /** Current number of cached items */
-  size: number;
-  /** Hit ratio (hits / (hits + misses)) */
-  hitRatio: number;
-}
-
-/**
- * Internal cache entry structure.
- */
-interface CacheEntry {
-  /** The cached query */
-  query: BuiltQuery;
-  /** When the entry was created */
-  timestamp: number;
-  /** Number of times this entry was accessed */
-  accessCount: number;
-}
-
-// ============================================================================
-// Implementation
-// ============================================================================
-
-/**
- * Default cache configuration.
- */
-const DEFAULT_CACHE_CONFIG: QueryCacheConfig = {
-  maxSize: 1000,
-  ttl: 0, // No expiry by default
-  trackStats: false,
-};
-
-/**
- * Global query cache instance.
- */
-let queryCache: Map<string, CacheEntry> | null = null;
-
-/**
- * Cache configuration.
- */
-let cacheConfig: QueryCacheConfig = { ...DEFAULT_CACHE_CONFIG };
 
 /**
  * Cache statistics.
  */
-let cacheStats: CacheStats = {
-  hits: 0,
-  misses: 0,
-  size: 0,
-  hitRatio: 0,
+export interface CacheStats {
+  hits: number;
+  misses: number;
+  size: number;
+  hitRatio: number;
+}
+
+interface CacheEntry {
+  query: BuiltQuery;
+  timestamp: number;
+}
+
+const DEFAULT_CONFIG: CacheConfig = {
+  maxSize: 1000,
+  ttl: 0,
 };
 
+let cache: Map<string, CacheEntry> | null = null;
+let config: CacheConfig = { ...DEFAULT_CONFIG };
+let stats: CacheStats = { hits: 0, misses: 0, size: 0, hitRatio: 0 };
+
 /**
- * Initializes or reconfigures the query cache.
- *
- * @param config - Cache configuration options
+ * Initializes the query cache.
  *
  * @example
  * ```typescript
- * initializeQueryCache({
- *   maxSize: 500,
- *   ttl: 60000, // 1 minute
- *   trackStats: true,
- * });
+ * initializeCache({ maxSize: 500, ttl: 60000 });
  * ```
  */
-export function initializeQueryCache(config: Partial<QueryCacheConfig> = {}): void {
-  cacheConfig = { ...DEFAULT_CACHE_CONFIG, ...config };
-  queryCache = new Map();
-  cacheStats = {
-    hits: 0,
-    misses: 0,
-    size: 0,
-    hitRatio: 0,
-  };
+export function initializeCache(options: Partial<CacheConfig> = {}): void {
+  config = { ...DEFAULT_CONFIG, ...options };
+  cache = new Map();
+  stats = { hits: 0, misses: 0, size: 0, hitRatio: 0 };
 }
 
 /**
- * Clears the query cache.
+ * Clears all cached queries.
  */
-export function clearQueryCache(): void {
-  if (queryCache) {
-    queryCache.clear();
-    cacheStats.size = 0;
-  }
+export function clearCache(): void {
+  cache?.clear();
+  stats.size = 0;
 }
 
 /**
  * Disables the query cache.
  */
-export function disableQueryCache(): void {
-  queryCache = null;
-  cacheStats = {
-    hits: 0,
-    misses: 0,
-    size: 0,
-    hitRatio: 0,
-  };
+export function disableCache(): void {
+  cache = null;
+  stats = { hits: 0, misses: 0, size: 0, hitRatio: 0 };
 }
 
 /**
- * Gets the current cache statistics.
- *
- * @returns The cache statistics
+ * Checks if caching is enabled.
  */
-export function getQueryCacheStats(): CacheStats {
-  return { ...cacheStats };
+export function isCacheEnabled(): boolean {
+  return cache !== null;
+}
+
+/**
+ * Gets cache statistics.
+ */
+export function getCacheStats(): CacheStats {
+  return { ...stats };
+}
+
+/**
+ * Generates an MD5 hash for a cache key.
+ */
+function md5(input: string): string {
+  return createHash('md5').update(input).digest('hex');
 }
 
 /**
  * Generates a cache key from field selections and options.
- *
- * The key is based on a structural hash that ignores values but captures
- * the shape of the query (field names, nesting, arguments).
- *
- * @param rootType - The root type being queried
- * @param fields - The field selections
- * @param options - Query build options
- * @returns A string cache key
+ * Uses MD5 hashing for efficient key generation and comparison.
  */
 export function generateCacheKey(
   rootType: string,
   fields: FieldSelection[],
   options: QueryBuildOptions = {},
 ): string {
-  const structuralHash = hashFieldSelections(fields);
-  const optionsHash = hashOptions(options);
-  return `${rootType}:${structuralHash}:${optionsHash}`;
+  const structure = serializeFields(fields);
+  const optionsStr = serializeOptions(options);
+  return md5(`${rootType}:${structure}:${optionsStr}`);
 }
 
 /**
- * Gets a cached query if available.
- *
- * @param key - The cache key
- * @returns The cached query or undefined
+ * Serializes field selections to a deterministic string.
  */
-export function getCachedQuery(key: string): BuiltQuery | undefined {
-  if (!queryCache) {
-    return undefined;
-  }
-
-  const entry = queryCache.get(key);
-
-  if (!entry) {
-    if (cacheConfig.trackStats) {
-      cacheStats.misses++;
-      updateHitRatio();
-    }
-    return undefined;
-  }
-
-  // Check TTL
-  if (cacheConfig.ttl > 0 && Date.now() - entry.timestamp > cacheConfig.ttl) {
-    queryCache.delete(key);
-    cacheStats.size = queryCache.size;
-    if (cacheConfig.trackStats) {
-      cacheStats.misses++;
-      updateHitRatio();
-    }
-    return undefined;
-  }
-
-  // Update access count
-  entry.accessCount++;
-
-  if (cacheConfig.trackStats) {
-    cacheStats.hits++;
-    updateHitRatio();
-  }
-
-  return entry.query;
+function serializeFields(fields: FieldSelection[]): string {
+  const sorted = [...fields].sort((a, b) => a.name.localeCompare(b.name));
+  return sorted.map(serializeField).join(',');
 }
 
-/**
- * Caches a built query.
- *
- * @param key - The cache key
- * @param query - The built query to cache
- */
-export function setCachedQuery(key: string, query: BuiltQuery): void {
-  if (!queryCache) {
-    return;
-  }
-
-  // Evict entries if at capacity
-  if (queryCache.size >= cacheConfig.maxSize) {
-    evictLeastRecentlyUsed();
-  }
-
-  queryCache.set(key, {
-    query,
-    timestamp: Date.now(),
-    accessCount: 1,
-  });
-
-  cacheStats.size = queryCache.size;
-}
-
-/**
- * Checks if the query cache is enabled.
- *
- * @returns true if caching is enabled
- */
-export function isQueryCacheEnabled(): boolean {
-  return queryCache !== null;
-}
-
-// ============================================================================
-// Internal Helpers
-// ============================================================================
-
-/**
- * Generates a structural hash of field selections.
- *
- * This hash captures the structure (field names, nesting) but ignores
- * actual argument values, allowing queries with different variables
- * but the same structure to be cached separately via the full options hash.
- */
-function hashFieldSelections(fields: FieldSelection[]): string {
-  const parts: string[] = [];
-
-  for (const field of sortedFields(fields)) {
-    parts.push(hashField(field));
-  }
-
-  return parts.join(',');
-}
-
-/**
- * Hashes a single field selection.
- */
-function hashField(field: FieldSelection): string {
-  let hash = field.name;
-
-  if (field.alias) {
-    hash = `${field.alias}:${hash}`;
-  }
-
-  if (field.arguments && Object.keys(field.arguments).length > 0) {
+function serializeField(field: FieldSelection): string {
+  let result = field.name;
+  if (field.alias) result = `${field.alias}:${result}`;
+  if (field.arguments) {
     const argKeys = Object.keys(field.arguments).sort().join('+');
-    hash += `(${argKeys})`;
+    result += `(${argKeys})`;
   }
-
-  if (field.selections && field.selections.length > 0) {
-    hash += `{${hashFieldSelections(field.selections)}}`;
+  if (field.selections?.length) {
+    result += `{${serializeFields(field.selections)}}`;
   }
-
-  return hash;
+  return result;
 }
 
-/**
- * Sorts fields by name for consistent hashing.
- */
-function sortedFields(fields: FieldSelection[]): FieldSelection[] {
-  return [...fields].sort((a, b) => a.name.localeCompare(b.name));
-}
-
-/**
- * Hashes relevant options that affect query structure.
- */
-function hashOptions(options: QueryBuildOptions): string {
+function serializeOptions(options: QueryBuildOptions): string {
   const parts: string[] = [];
-
-  if (options.operationName) {
-    parts.push(`op:${options.operationName}`);
-  }
-
-  if (options.requiredFields && options.requiredFields.length > 0) {
-    parts.push(`req:${options.requiredFields.sort().join('+')}`);
-  }
-
+  if (options.operationName) parts.push(`op:${options.operationName}`);
+  if (options.requiredFields?.length) parts.push(`req:${options.requiredFields.sort().join('+')}`);
   if (options.fieldMappings && Object.keys(options.fieldMappings).length > 0) {
     const mappings = Object.entries(options.fieldMappings)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -314,49 +142,53 @@ function hashOptions(options: QueryBuildOptions): string {
       .join('+');
     parts.push(`map:${mappings}`);
   }
-
-  // Include a hash of variable names (not values)
-  if (options.variables && Object.keys(options.variables).length > 0) {
-    const varNames = Object.keys(options.variables).sort().join('+');
-    parts.push(`vars:${varNames}`);
-  }
-
   return parts.length > 0 ? parts.join('|') : '_';
 }
 
 /**
- * Evicts the least recently used cache entry.
+ * Gets a cached query if available.
  */
-function evictLeastRecentlyUsed(): void {
-  if (!queryCache || queryCache.size === 0) {
-    return;
+export function getCachedQuery(key: string): BuiltQuery | undefined {
+  if (!cache) return undefined;
+
+  const entry = cache.get(key);
+  if (!entry) {
+    stats.misses++;
+    updateHitRatio();
+    return undefined;
   }
 
-  let lruKey: string | null = null;
-  let lruAccessCount = Number.POSITIVE_INFINITY;
-  let lruTimestamp = Number.POSITIVE_INFINITY;
-
-  for (const [key, entry] of queryCache.entries()) {
-    // Prefer evicting entries with fewer accesses, then older entries
-    if (
-      entry.accessCount < lruAccessCount ||
-      (entry.accessCount === lruAccessCount && entry.timestamp < lruTimestamp)
-    ) {
-      lruKey = key;
-      lruAccessCount = entry.accessCount;
-      lruTimestamp = entry.timestamp;
-    }
+  // Check TTL
+  if (config.ttl > 0 && Date.now() - entry.timestamp > config.ttl) {
+    cache.delete(key);
+    stats.size = cache.size;
+    stats.misses++;
+    updateHitRatio();
+    return undefined;
   }
 
-  if (lruKey) {
-    queryCache.delete(lruKey);
-  }
+  stats.hits++;
+  updateHitRatio();
+  return entry.query;
 }
 
 /**
- * Updates the hit ratio statistic.
+ * Stores a query in the cache.
  */
+export function setCachedQuery(key: string, query: BuiltQuery): void {
+  if (!cache) return;
+
+  // Evict oldest entry if at capacity
+  if (cache.size >= config.maxSize) {
+    const oldestKey = cache.keys().next().value;
+    if (oldestKey) cache.delete(oldestKey);
+  }
+
+  cache.set(key, { query, timestamp: Date.now() });
+  stats.size = cache.size;
+}
+
 function updateHitRatio(): void {
-  const total = cacheStats.hits + cacheStats.misses;
-  cacheStats.hitRatio = total > 0 ? cacheStats.hits / total : 0;
+  const total = stats.hits + stats.misses;
+  stats.hitRatio = total > 0 ? stats.hits / total : 0;
 }
