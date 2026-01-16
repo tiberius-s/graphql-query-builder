@@ -1,6 +1,31 @@
 # graphql-query-builder
 
+[![Docs](https://img.shields.io/badge/docs-API-blue)](https://tiberius-s.github.io/graphql-query-builder/)
+
 A TypeScript library for building optimized GraphQL queries between servers. Extract requested fields from resolver info and build queries that fetch only what the client needs.
+
+## Table of Contents
+
+- [Documentation](#documentation)
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Caching](#caching)
+- [Configuration & Validation](#configuration--validation)
+- [API Overview](#api-overview)
+- [Types](#types)
+- [Examples](#examples)
+- [License](#license)
+
+## Documentation
+
+📚 **Full API Documentation**: <https://tiberius-s.github.io/graphql-query-builder/>
+
+To generate documentation locally:
+
+```bash
+npm run docs        # Generate docs in ./docs
+npm run docs:serve  # View docs at http://localhost:3000
+```
 
 ## Problem
 
@@ -28,15 +53,10 @@ Client requests:          Upstream receives:
 npm install graphql-query-builder
 ```
 
-## Usage
+## Quick Start
 
 ```typescript
-import {
-  extractFieldsFromInfo,
-  buildQuery,
-  configure,
-  validateFields,
-} from 'graphql-query-builder';
+import { extractFieldsFromInfo, buildQuery, configure, assertValid } from 'graphql-query-builder';
 
 // Configure validation limits
 configure({
@@ -49,14 +69,18 @@ const resolvers = {
   Query: {
     user: async (_, { id }, context, info) => {
       // Extract only the fields the client requested
-      const fields = extractFieldsFromInfo(info);
+      const { fields } = extractFieldsFromInfo(info);
 
       // Validate against configured limits
-      validateFields(fields);
+      assertValid(fields);
 
       // Build the upstream query
       const { query, variables } = buildQuery('user', fields, {
+        operationName: 'GetUser',
+        operationType: 'query',
         variables: { id },
+        variableTypes: { id: 'ID!' },
+        rootArguments: { id: { __variable: 'id' } },
       });
 
       // Execute against upstream
@@ -83,32 +107,51 @@ import { initializeCache, buildQueryCached, getCacheStats } from 'graphql-query-
 initializeCache({ maxSize: 1000, ttl: 300000 });
 
 // Use cached version in resolvers
-const { query, variables } = buildQueryCached('user', fields, { variables: { id } });
+const { query, variables } = buildQueryCached('user', fields, {
+  variables: { id },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
+});
 
 // Monitor performance
 const stats = getCacheStats();
 console.log(`Cache hit ratio: ${(stats.hitRatio * 100).toFixed(1)}%`);
 ```
 
-## Documentation
+## Configuration & Validation
 
-📚 **[Full API Documentation](https://tiberius-s.github.io/graphql-query-builder/)**
+Global configuration is applied once at startup:
 
-Complete TypeDoc-generated API documentation is available online, including:
+```typescript
+import { configure } from 'graphql-query-builder';
 
-- Detailed function signatures and parameters
-- Comprehensive examples and use cases
-- Type definitions and interfaces
-- Architecture and design patterns
-
-To generate documentation locally:
-
-```bash
-npm run docs        # Generate docs in ./docs
-npm run docs:serve  # View docs at http://localhost:3000
+configure({
+  maxDepth: 10,
+  maxFields: 100,
+  blockedFields: ['password', 'ssn'],
+  requiredFields: ['id'],
+  fieldMappings: { email: 'emailAddress' },
+});
 ```
 
-## API Reference
+Validation helpers:
+
+```typescript
+import { validateFields, assertValid, sanitizeFields } from 'graphql-query-builder';
+
+const result = validateFields(fields);
+if (!result.valid) {
+  console.log(result.errors);
+}
+
+// Throwing variant
+assertValid(fields);
+
+// Remove blocked fields (does not enforce depth/field-count limits)
+const sanitized = sanitizeFields(fields);
+```
+
+## API Overview
 
 ### Field Extraction
 
@@ -117,7 +160,7 @@ npm run docs:serve  # View docs at http://localhost:3000
 Extracts field selections from GraphQL resolver info.
 
 ```typescript
-const fields = extractFieldsFromInfo(info, {
+const { fields } = extractFieldsFromInfo(info, {
   maxDepth: 5, // Limit extraction depth
   includeTypename: false,
 });
@@ -152,6 +195,8 @@ Builds a GraphQL query string from field selections.
 const { query, variables } = buildQuery('user', fields, {
   operationName: 'GetUser',
   variables: { id: '123' },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
   requiredFields: ['id'],
 });
 ```
@@ -187,7 +232,9 @@ Sets global configuration.
 configure({
   maxDepth: 10, // Maximum query depth
   maxFields: 100, // Maximum number of fields
-  allowedRootFields: ['user', 'product'], // Allowed root types
+  blockedFields: ['password', 'ssn'], // Fields that should never be included
+  requiredFields: ['id'], // Fields that should always be included
+  fieldMappings: { email: 'emailAddress' }, // Local -> upstream mapping
 });
 ```
 
@@ -218,7 +265,7 @@ try {
 
 #### `sanitizeFields(fields)`
 
-Removes fields exceeding depth limits.
+Removes blocked fields recursively.
 
 ```typescript
 const sanitized = sanitizeFields(fields);
@@ -262,11 +309,15 @@ const { hits, misses, hitRatio, size } = getCacheStats();
 ```typescript
 import type {
   FieldSelection,
+  ExtractedFields,
+  ExtractionOptions,
   QueryBuildOptions,
   BuiltQuery,
+  QueryBuilderConfig,
+  ValidationOptions,
   ValidationResult,
-  Config,
-  CacheOptions,
+  CacheConfig,
+  CacheStats,
 } from 'graphql-query-builder';
 ```
 
@@ -274,10 +325,12 @@ import type {
 
 See the [examples](./examples) directory:
 
-- [basic-usage.ts](examples/basic-usage/basic-usage.ts) - Complete resolver example
-- [caching.ts](examples/caching/caching.ts) - Cache configuration and monitoring
-- [validation.ts](examples/validation/validation.ts) - Field validation patterns
-- [Schema Mapping with Zod](./examples/schema-mapping-zod/schema-mapping-zod.md) - Bidirectional translation using Zod 4 codecs
-- [Schema Mapping with Generic Functions](./examples/schema-mapping-generic/schema-mapping-generic.md) - Translation with plain TypeScript
+- [Basic usage](examples/basic-usage/basic-usage.md) ([source](examples/basic-usage/basic-usage.ts))
+- [Caching](examples/caching/caching.md) ([source](examples/caching/caching.ts))
+- [Validation](examples/validation/validation.md) ([source](examples/validation/validation.ts))
+- [Schema mapping (Zod)](examples/schema-mapping-zod/schema-mapping-zod.md) ([source](examples/schema-mapping-zod/schema-mapping-zod.ts))
+- [Schema mapping (generic)](examples/schema-mapping-generic/schema-mapping-generic.md) ([source](examples/schema-mapping-generic/schema-mapping-generic.ts))
+
+## License
 
 MIT
