@@ -134,7 +134,9 @@ describe('Cache Module', () => {
       const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
 
       const base = generateCacheKey('user', fields);
-      const differentOperationType = generateCacheKey('user', fields, { operationType: 'mutation' });
+      const differentOperationType = generateCacheKey('user', fields, {
+        operationType: 'mutation',
+      });
       const differentRootArgs = generateCacheKey('user', fields, {
         rootArguments: { id: { __variable: 'id' } },
       });

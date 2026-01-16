@@ -4,8 +4,8 @@ This guide shows how to proxy a GraphQL API to an upstream GraphQL service when 
 
 You'll use two tools together:
 
-- **Field mappings** translate field *names* while building the upstream operation.
-- **Zod codecs** translate field *values* while decoding responses (and encoding mutation inputs).
+- **Field mappings** translate field _names_ while building the upstream operation.
+- **Zod codecs** translate field _values_ while decoding responses (and encoding mutation inputs).
 
 The full working example is in [schema-mapping-zod.ts](./schema-mapping-zod.ts).
 
@@ -227,7 +227,11 @@ export async function updateUser(
 Creating a user is typically the same idea: encode, strip upstream-only fields, then build a mutation.
 
 ```typescript
-export async function createUser(input: Omit<ServiceUser, 'id' | 'createdAt'>, ctx: AppContext, info: GraphQLResolveInfo) {
+export async function createUser(
+  input: Omit<ServiceUser, 'id' | 'createdAt'>,
+  ctx: AppContext,
+  info: GraphQLResolveInfo,
+) {
   const { fields } = extractFieldsFromInfo(info);
 
   const serviceUserForEncoding: ServiceUser = {

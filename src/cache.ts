@@ -158,9 +158,7 @@ function serializeOptions(options: QueryBuildOptions): string {
 
 function serializeArguments(args: Record<string, unknown>): string {
   const entries = Object.entries(args).sort(([a], [b]) => a.localeCompare(b));
-  return entries
-    .map(([key, value]) => `${key}=${serializeArgumentValue(value)}`)
-    .join(',');
+  return entries.map(([key, value]) => `${key}=${serializeArgumentValue(value)}`).join(',');
 }
 
 function serializeArgumentValue(value: unknown): string {
