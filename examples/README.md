@@ -6,11 +6,26 @@ These examples demonstrate the graphql-query-builder library for proxying GraphQ
 
 When your GraphQL server needs to forward queries to an upstream GraphQL service while preserving the client's field selection, this library extracts the requested fields and builds properly formatted upstream queries.
 
-## Files
+## Tutorials
 
-- **[basic-usage.ts](./basic-usage.ts)** - Complete resolver example showing the core workflow
-- **[caching.ts](./caching.ts)** - Cache configuration and monitoring for repeated query patterns
-- **[validation.ts](./validation.ts)** - Field validation and sanitization to protect against abuse
+### Getting Started
+
+- **[Basic Usage](basic-usage/basic-usage.md)** - Core workflow for preventing overfetching
+- **[Caching](caching/caching.md)** - Performance optimization with query caching
+- **[Validation](validation/validation.md)** - Protect against abuse with field validation
+
+### Schema Mapping
+
+When your service schema differs from the upstream schema:
+
+- **[Schema Mapping with Zod](./schema-mapping-zod/schema-mapping-zod.md)** - Using Zod 4 codecs for bidirectional translation
+- **[Schema Mapping with Generic Functions](./schema-mapping-generic/schema-mapping-generic.md)** - Plain TypeScript without external dependencies
+
+## Code Examples
+
+- **[basic-usage.ts](basic-usage/basic-usage.ts)** - Complete resolver implementation
+- **[caching.ts](caching/caching.ts)** - Cache configuration and monitoring
+- **[validation.ts](validation/validation.ts)** - Field validation and sanitization
 
 ## Quick Reference
 
@@ -42,7 +57,7 @@ const { query, variables } = buildQuery('upstreamType', fields, { variables: { i
 - `buildQueryFromPaths(typeName, paths, options?)` - Build from dot-notation paths
 - `buildQueryFromPathsCached(typeName, paths, options?)` - Same as above, with caching
 
-### Configuration & Validation
+### Configuration and Validation
 
 - `configure(options)` - Set depth limits and allowed fields
 - `validateFields(fields)` - Check fields against configured limits

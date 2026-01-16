@@ -8,8 +8,8 @@
  * directly into the configuration rather than being separate concerns.
  */
 
-import type { FieldSelection } from './extractor.js';
 import { ConfigurationError, QueryValidationError } from './errors.js';
+import type { FieldSelection } from './extractor.js';
 
 /**
  * Configuration for the query builder.

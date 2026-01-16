@@ -7,9 +7,9 @@
  * This is the core functionality of the package.
  */
 
-import type { FieldSelection } from './extractor.js';
-import { getConfig } from './config.js';
 import { generateCacheKey, getCachedQuery, isCacheEnabled, setCachedQuery } from './cache.js';
+import { getConfig } from './config.js';
+import type { FieldSelection } from './extractor.js';
 
 /**
  * Options for building a GraphQL query.

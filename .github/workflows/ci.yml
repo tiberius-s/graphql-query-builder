@@ -48,7 +48,7 @@ jobs:
         run: npm run build:ci
 
       - name: Run integration tests
-        run: npm run test:integration:ci
+        run: npm run test:ci
 
       - name: Upload coverage
         if: matrix.node-version == 22

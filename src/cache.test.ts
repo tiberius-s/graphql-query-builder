@@ -3,6 +3,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { BuiltQuery } from './builder.js';
 import {
   clearCache,
   disableCache,
@@ -13,7 +14,6 @@ import {
   isCacheEnabled,
   setCachedQuery,
 } from './cache.js';
-import type { BuiltQuery } from './builder.js';
 import type { FieldSelection } from './extractor.js';
 
 describe('Cache Module', () => {
@@ -93,6 +93,81 @@ describe('Cache Module', () => {
 
       const key1 = generateCacheKey('user', fields);
       const key2 = generateCacheKey('product', fields);
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should include alias in key generation', () => {
+      const fields1: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1, alias: 'userId' }];
+      const fields2: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields1);
+      const key2 = generateCacheKey('user', fields2);
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should include arguments in key generation', () => {
+      const fields1: FieldSelection[] = [
+        { name: 'id', path: ['id'], depth: 1, arguments: { limit: 10 } },
+      ];
+      const fields2: FieldSelection[] = [
+        { name: 'id', path: ['id'], depth: 1 }, // No arguments
+      ];
+
+      const key1 = generateCacheKey('user', fields1);
+      const key2 = generateCacheKey('user', fields2);
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should include options in key generation', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, { operationName: 'GetUser' });
+      const key2 = generateCacheKey('user', fields, { operationName: 'FetchUser' });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should include fieldMappings in key generation', () => {
+      const fields: FieldSelection[] = [{ name: 'email', path: ['email'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, { fieldMappings: { email: 'emailAddress' } });
+      const key2 = generateCacheKey('user', fields, { fieldMappings: { email: 'mail' } });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should include requiredFields in key generation', () => {
+      const fields: FieldSelection[] = [{ name: 'email', path: ['email'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, { requiredFields: ['id'] });
+      const key2 = generateCacheKey('user', fields, { requiredFields: ['id', 'version'] });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should include nested selections in key generation', () => {
+      const fields1: FieldSelection[] = [
+        {
+          name: 'profile',
+          path: ['profile'],
+          depth: 1,
+          selections: [{ name: 'bio', path: ['profile', 'bio'], depth: 2 }],
+        },
+      ];
+      const fields2: FieldSelection[] = [
+        {
+          name: 'profile',
+          path: ['profile'],
+          depth: 1,
+          selections: [{ name: 'avatar', path: ['profile', 'avatar'], depth: 2 }],
+        },
+      ];
+
+      const key1 = generateCacheKey('user', fields1);
+      const key2 = generateCacheKey('user', fields2);
 
       expect(key1).not.toBe(key2);
     });

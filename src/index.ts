@@ -32,10 +32,6 @@
  * ```
  */
 
-// === Field Extraction ===
-export type { ExtractedFields, ExtractionOptions, FieldSelection } from './extractor.js';
-export { extractFieldsFromInfo, getRequestedFieldNames, isFieldRequested } from './extractor.js';
-
 // === Query Building ===
 export type { BuiltQuery, QueryBuildOptions } from './builder.js';
 export {
@@ -44,27 +40,28 @@ export {
   buildQueryFromPaths,
   buildQueryFromPathsCached,
 } from './builder.js';
+// === Caching ===
+export type { CacheConfig, CacheStats } from './cache.js';
+export {
+  clearCache,
+  disableCache,
+  getCacheStats,
+  initializeCache,
+  isCacheEnabled,
+} from './cache.js';
 
 // === Configuration & Validation ===
 export type { QueryBuilderConfig, ValidationOptions, ValidationResult } from './config.js';
 export {
+  assertValid,
   configure,
   getConfig,
   resetConfig,
-  validateFields,
-  assertValid,
   sanitizeFields,
+  validateFields,
 } from './config.js';
-
-// === Caching ===
-export type { CacheConfig, CacheStats } from './cache.js';
-export {
-  initializeCache,
-  clearCache,
-  disableCache,
-  isCacheEnabled,
-  getCacheStats,
-} from './cache.js';
-
 // === Errors ===
-export { QueryValidationError, ConfigurationError } from './errors.js';
+export { ConfigurationError, QueryValidationError } from './errors.js';
+// === Field Extraction ===
+export type { ExtractedFields, ExtractionOptions, FieldSelection } from './extractor.js';
+export { extractFieldsFromInfo, getRequestedFieldNames, isFieldRequested } from './extractor.js';

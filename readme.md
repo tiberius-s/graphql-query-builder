@@ -256,8 +256,10 @@ import type {
 
 See the [examples](./examples) directory:
 
-- [basic-usage.ts](./examples/basic-usage.ts) - Complete resolver example
-- [caching.ts](./examples/caching.ts) - Cache configuration and monitoring
-- [validation.ts](./examples/validation.ts) - Field validation patterns
+- [basic-usage.ts](examples/basic-usage/basic-usage.ts) - Complete resolver example
+- [caching.ts](examples/caching/caching.ts) - Cache configuration and monitoring
+- [validation.ts](examples/validation/validation.ts) - Field validation patterns
+- [Schema Mapping with Zod](./examples/schema-mapping-zod/schema-mapping-zod.md) - Bidirectional translation using Zod 4 codecs
+- [Schema Mapping with Generic Functions](./examples/schema-mapping-generic/schema-mapping-generic.md) - Translation with plain TypeScript
 
 MIT

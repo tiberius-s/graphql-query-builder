@@ -45,6 +45,18 @@ describe('Config Module', () => {
       expect(() => configure({ blockedFields: 'not-an-array' as any })).toThrow(ConfigurationError);
     });
 
+    it('should throw for invalid requiredFields type', () => {
+      expect(() => configure({ requiredFields: 'not-an-array' as any })).toThrow(
+        ConfigurationError,
+      );
+    });
+
+    it('should throw for invalid fieldMappings type', () => {
+      expect(() => configure({ fieldMappings: 'not-an-object' as any })).toThrow(
+        ConfigurationError,
+      );
+    });
+
     it('should merge with existing config', () => {
       configure({ maxDepth: 5 });
       configure({ maxFields: 50 });
