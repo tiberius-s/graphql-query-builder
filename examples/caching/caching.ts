@@ -27,10 +27,18 @@ const fields = [
 ];
 
 // First call builds and caches the query
-const result1 = buildQueryCached('user', fields, { variables: { id: '1' } });
+const result1 = buildQueryCached('user', fields, {
+  variables: { id: '1' },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
+});
 
 // Second call retrieves from cache (same structure, different variables)
-const result2 = buildQueryCached('user', fields, { variables: { id: '2' } });
+const result2 = buildQueryCached('user', fields, {
+  variables: { id: '2' },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
+});
 
 // Both have the same query string
 console.log(result1.query === result2.query); // true

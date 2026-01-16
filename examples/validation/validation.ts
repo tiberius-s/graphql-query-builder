@@ -52,7 +52,7 @@ try {
   }
 }
 
-// Sanitize fields by removing those exceeding depth limits
+// Sanitize fields by removing blocked fields
 const sanitized = sanitizeFields(requestedFields);
 console.log(`Sanitized from ${requestedFields.length} to ${sanitized.length} fields`);
 
@@ -101,6 +101,5 @@ if (!depthValidation.valid) {
   depthValidation.errors.forEach((err) => console.log(`  - ${err}`));
 }
 
-// Sanitize to remove the too-deep fields
-const sanitizedDeep = sanitizeFields(deepFields);
-console.log(`Deep query sanitized from ${deepFields.length} to ${sanitizedDeep.length} fields`);
+// Note: sanitizeFields() does not remove fields that exceed maxDepth/maxFields.
+// Use validateFields()/assertValid() to reject those queries.

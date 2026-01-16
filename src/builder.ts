@@ -17,8 +17,14 @@ import type { FieldSelection } from './extractor.js';
 export interface QueryBuildOptions {
   /** Operation name for the query */
   operationName?: string;
+  /** Operation type (default: 'query') */
+  operationType?: 'query' | 'mutation';
   /** Variables to include in the query */
   variables?: Record<string, unknown>;
+  /** Explicit GraphQL types for variables (e.g. `{ id: 'ID!', input: 'UpdateUserInput!' }`) */
+  variableTypes?: Record<string, string>;
+  /** Arguments to apply to the root field */
+  rootArguments?: Record<string, unknown>;
   /** Field name mappings (local -> upstream) */
   fieldMappings?: Record<string, string>;
   /** Fields to always include regardless of selection */
@@ -45,7 +51,10 @@ export interface BuiltQuery {
 
 const DEFAULT_OPTIONS: Required<QueryBuildOptions> = {
   operationName: 'UpstreamQuery',
+  operationType: 'query',
   variables: {},
+  variableTypes: {},
+  rootArguments: {},
   fieldMappings: {},
   requiredFields: [],
 };
@@ -78,14 +87,22 @@ export function buildQuery(
     fieldMappings: { ...config.fieldMappings, ...options.fieldMappings },
     requiredFields: [...config.requiredFields, ...(options.requiredFields ?? [])],
     operationName: options.operationName ?? DEFAULT_OPTIONS.operationName,
+    operationType: options.operationType ?? DEFAULT_OPTIONS.operationType,
     variables: options.variables ?? DEFAULT_OPTIONS.variables,
+    variableTypes: options.variableTypes ?? DEFAULT_OPTIONS.variableTypes,
+    rootArguments: options.rootArguments ?? DEFAULT_OPTIONS.rootArguments,
   };
 
   // Add required fields
   const mergedFields = mergeRequiredFields(fields, opts.requiredFields);
 
   // Collect variables
-  const varDefs = collectVariableDefinitions(mergedFields, opts.variables);
+  const varDefs = collectVariableDefinitions(
+    mergedFields,
+    opts.variables,
+    opts.variableTypes,
+    opts.rootArguments,
+  );
 
   // Build selection set
   const selectionSet = buildSelectionSet(mergedFields, opts.fieldMappings);
@@ -94,12 +111,13 @@ export function buildQuery(
   const metadata = calculateMetadata(mergedFields);
 
   // Build query string
+  const rootFieldWithArgs = formatRootField(rootField, opts.rootArguments);
   let query: string;
   if (Object.keys(varDefs).length > 0) {
     const varDefsStr = formatVariableDefinitions(varDefs);
-    query = `query ${opts.operationName}(${varDefsStr}) { ${rootField}${selectionSet} }`;
+    query = `${opts.operationType} ${opts.operationName}(${varDefsStr}) { ${rootFieldWithArgs}${selectionSet} }`;
   } else {
-    query = `query ${opts.operationName} { ${rootField}${selectionSet} }`;
+    query = `${opts.operationType} ${opts.operationName} { ${rootFieldWithArgs}${selectionSet} }`;
   }
 
   return {
@@ -202,6 +220,11 @@ function formatArguments(args: Record<string, unknown>): string {
     .join(', ');
 }
 
+function formatRootField(rootField: string, rootArguments: Record<string, unknown>): string {
+  if (!rootArguments || Object.keys(rootArguments).length === 0) return rootField;
+  return `${rootField}(${formatArguments(rootArguments)})`;
+}
+
 function formatValue(value: unknown): string {
   if (value === null) return 'null';
   if (typeof value === 'string') return JSON.stringify(value);
@@ -224,23 +247,40 @@ function isVariableRef(value: unknown): value is { __variable: string } {
 function collectVariableDefinitions(
   fields: FieldSelection[],
   variables: Record<string, unknown>,
+  variableTypes: Record<string, string>,
+  rootArguments: Record<string, unknown>,
 ): Record<string, string> {
   const defs: Record<string, string> = {};
+
+  function collectFromValue(value: unknown): void {
+    if (isVariableRef(value)) {
+      const name = value.__variable;
+      defs[name] = variableTypes[name] ?? inferType(variables[name]);
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) collectFromValue(item);
+      return;
+    }
+
+    if (typeof value === 'object' && value !== null) {
+      for (const nested of Object.values(value as Record<string, unknown>)) {
+        collectFromValue(nested);
+      }
+    }
+  }
 
   function traverse(fieldList: FieldSelection[]): void {
     for (const field of fieldList) {
       if (field.arguments) {
-        for (const value of Object.values(field.arguments)) {
-          if (isVariableRef(value)) {
-            const name = value.__variable;
-            defs[name] = inferType(variables[name]);
-          }
-        }
+        collectFromValue(field.arguments);
       }
       if (field.selections) traverse(field.selections);
     }
   }
 
+  collectFromValue(rootArguments);
   traverse(fields);
   return defs;
 }
@@ -249,6 +289,9 @@ function inferType(value: unknown): string {
   if (value === null || value === undefined) return 'String';
   if (typeof value === 'string') {
     if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
+      return 'ID!';
+    }
+    if (/^\d+$/.test(value)) {
       return 'ID!';
     }
     return 'String!';

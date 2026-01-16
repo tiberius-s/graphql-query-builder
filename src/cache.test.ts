@@ -130,6 +130,23 @@ describe('Cache Module', () => {
       expect(key1).not.toBe(key2);
     });
 
+    it('should include operationType, rootArguments, and variableTypes in key generation', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const base = generateCacheKey('user', fields);
+      const differentOperationType = generateCacheKey('user', fields, { operationType: 'mutation' });
+      const differentRootArgs = generateCacheKey('user', fields, {
+        rootArguments: { id: { __variable: 'id' } },
+      });
+      const differentVariableTypes = generateCacheKey('user', fields, {
+        variableTypes: { id: 'ID!' },
+      });
+
+      expect(base).not.toBe(differentOperationType);
+      expect(base).not.toBe(differentRootArgs);
+      expect(base).not.toBe(differentVariableTypes);
+    });
+
     it('should include fieldMappings in key generation', () => {
       const fields: FieldSelection[] = [{ name: 'email', path: ['email'], depth: 1 }];
 

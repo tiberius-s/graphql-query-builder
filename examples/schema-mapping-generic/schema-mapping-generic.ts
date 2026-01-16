@@ -161,6 +161,8 @@ export async function getUser(
   const { query, variables } = buildQuery('user', upstreamFields, {
     operationName: 'GetUpstreamUser',
     variables: { id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
   });
 
   // 4. Send request via datasource
@@ -191,6 +193,8 @@ export async function getUsers(
   const { query, variables } = buildQuery('users', upstreamFields, {
     operationName: 'GetUpstreamUsers',
     variables: { ids },
+    variableTypes: { ids: '[ID!]!' },
+    rootArguments: { ids: { __variable: 'ids' } },
   });
 
   // 4. Send request

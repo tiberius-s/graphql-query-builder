@@ -59,10 +59,18 @@ const fields = [
 ];
 
 // First call builds and caches the query
-const result1 = buildQueryCached('user', fields, { variables: { id: '1' } });
+const result1 = buildQueryCached('user', fields, {
+  variables: { id: '1' },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
+});
 
 // Second call retrieves from cache
-const result2 = buildQueryCached('user', fields, { variables: { id: '2' } });
+const result2 = buildQueryCached('user', fields, {
+  variables: { id: '2' },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
+});
 
 // Same query string, different variables
 console.log(result1.query === result2.query); // true
@@ -76,9 +84,11 @@ The cache key is an MD5 hash of:
 
 - Root field name
 - Field structure (names, aliases, arguments)
-- Options (operation name, required fields, field mappings)
+- Options (operation type/name, root arguments, required fields, field mappings)
 
 Variables are NOT part of the cache key, so queries with different variable values share the same cached query string.
+
+Tip: If you change configuration that affects query output (for example `requiredFields` or `fieldMappings`), clear the cache so future requests rebuild queries using the new configuration.
 
 ## Building from Paths
 
@@ -185,6 +195,7 @@ buildQueryCached('cart', fields4); // key1 evicted, key4 added
 
 ```typescript
 import {
+  extractFieldsFromInfo,
   initializeCache,
   buildQueryCached,
   getCacheStats,
@@ -201,6 +212,8 @@ const userResolver = async (_parent, args, context, info) => {
   const { query, variables } = buildQueryCached('user', fields, {
     operationName: 'GetUser',
     variables: { id: args.id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
   });
 
   return context.upstream.query(query, variables);
@@ -218,5 +231,5 @@ app.get('/health', (req, res) => {
 
 ## Next Steps
 
-- [Validation](validation/validation.md) - Protect against abuse
-- [Basic Usage](./basic-usage.md) - Core workflow
+- [Validation](../validation/validation.md) - Protect against abuse
+- [Basic Usage](../basic-usage/basic-usage.md) - Core workflow

@@ -66,6 +66,34 @@ describe('Builder Module', () => {
       expect(result.variables).toEqual({ userId: '123' });
     });
 
+    it('should support variables on the root field', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const result = buildQuery('user', fields, {
+        operationName: 'GetUser',
+        variables: { id: '123' },
+        rootArguments: { id: { __variable: 'id' } },
+      });
+
+      expect(result.query).toContain('query GetUser(');
+      expect(result.query).toContain('$id: ID!');
+      expect(result.query).toContain('user(id: $id)');
+    });
+
+    it('should support mutation operations', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const result = buildQuery('updateProfile', fields, {
+        operationType: 'mutation',
+        operationName: 'UpdateProfile',
+        rootArguments: { input: { firstName: 'Ada' } },
+      });
+
+      expect(result.query).toContain('mutation UpdateProfile');
+      expect(result.query).toContain('updateProfile(input:');
+      expect(result.query).toContain('firstName');
+    });
+
     it('should handle nested field selections', () => {
       const fields: FieldSelection[] = [
         {
@@ -292,7 +320,7 @@ describe('Builder Module', () => {
 
       const result = buildQuery('query', fields, { variables: { userIds: ['1', '2', '3'] } });
 
-      expect(result.query).toContain('$userIds: [String!]');
+      expect(result.query).toContain('$userIds: [ID!]');
     });
 
     it('should handle empty array variables', () => {

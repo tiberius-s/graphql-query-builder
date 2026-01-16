@@ -59,7 +59,7 @@ const validation: ValidationResult = validateFields(fields);
 if (!validation.valid) {
   console.log('Validation failed:');
   validation.errors.forEach((err) => console.log(`  - ${err}`));
-  // Output: - Field "passwordHash" is blocked
+  // Output: - Query contains blocked fields: passwordHash
 }
 ```
 
@@ -82,7 +82,9 @@ try {
 
 ## Sanitizing Fields
 
-Remove invalid fields instead of rejecting the query:
+Remove blocked fields instead of rejecting the whole query.
+
+`sanitizeFields()` only removes blocked fields. It does not enforce `maxDepth` or `maxFields` (use `validateFields()` / `assertValid()` for those).
 
 ```typescript
 import { sanitizeFields } from 'graphql-query-builder';
@@ -115,7 +117,7 @@ const deepFields = [
 
 const validation = validateFields(deepFields);
 // validation.valid === false
-// validation.errors includes "Depth 4 exceeds maximum of 3"
+// validation.errors includes "Query depth 4 exceeds maximum of 3"
 ```
 
 ## Field Count Validation
@@ -194,14 +196,14 @@ The validation result includes descriptive error messages:
 const validation = validateFields(fields);
 if (!validation.valid) {
   validation.errors.forEach((error) => {
-    // "Field "passwordHash" is blocked"
-    // "Depth 6 exceeds maximum of 5"
-    // "Field count 75 exceeds maximum of 50"
+    // "Query contains blocked fields: passwordHash"
+    // "Query depth 6 exceeds maximum of 5"
+    // "Query has 75 fields, exceeding maximum of 50"
   });
 }
 ```
 
 ## Next Steps
 
-- [Basic Usage](./basic-usage.md) - Core workflow
-- [Caching](./caching.md) - Performance optimization
+- [Basic Usage](../basic-usage/basic-usage.md) - Core workflow
+- [Caching](../caching/caching.md) - Performance optimization

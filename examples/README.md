@@ -40,8 +40,12 @@ import {
 } from 'graphql-query-builder';
 
 // In your resolver
-const fields = extractFieldsFromInfo(info);
-const { query, variables } = buildQuery('upstreamType', fields, { variables: { id } });
+const { fields } = extractFieldsFromInfo(info);
+const { query, variables } = buildQuery('upstreamType', fields, {
+  variables: { id },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
+});
 ```
 
 ## API Summary
@@ -62,7 +66,7 @@ const { query, variables } = buildQuery('upstreamType', fields, { variables: { i
 - `configure(options)` - Set depth limits and allowed fields
 - `validateFields(fields)` - Check fields against configured limits
 - `assertValid(fields)` - Throw if fields exceed limits
-- `sanitizeFields(fields)` - Remove fields exceeding depth limits
+- `sanitizeFields(fields)` - Remove blocked fields from a selection tree
 
 ### Caching
 

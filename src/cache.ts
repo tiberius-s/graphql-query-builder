@@ -134,7 +134,18 @@ function serializeField(field: FieldSelection): string {
 function serializeOptions(options: QueryBuildOptions): string {
   const parts: string[] = [];
   if (options.operationName) parts.push(`op:${options.operationName}`);
+  if (options.operationType) parts.push(`type:${options.operationType}`);
   if (options.requiredFields?.length) parts.push(`req:${options.requiredFields.sort().join('+')}`);
+  if (options.variableTypes && Object.keys(options.variableTypes).length > 0) {
+    const types = Object.entries(options.variableTypes)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}:${v}`)
+      .join('+');
+    parts.push(`vars:${types}`);
+  }
+  if (options.rootArguments && Object.keys(options.rootArguments).length > 0) {
+    parts.push(`root:${serializeArguments(options.rootArguments)}`);
+  }
   if (options.fieldMappings && Object.keys(options.fieldMappings).length > 0) {
     const mappings = Object.entries(options.fieldMappings)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -143,6 +154,38 @@ function serializeOptions(options: QueryBuildOptions): string {
     parts.push(`map:${mappings}`);
   }
   return parts.length > 0 ? parts.join('|') : '_';
+}
+
+function serializeArguments(args: Record<string, unknown>): string {
+  const entries = Object.entries(args).sort(([a], [b]) => a.localeCompare(b));
+  return entries
+    .map(([key, value]) => `${key}=${serializeArgumentValue(value)}`)
+    .join(',');
+}
+
+function serializeArgumentValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    return JSON.stringify(value);
+  }
+
+  if (Array.isArray(value)) {
+    return `[${value.map(serializeArgumentValue).join(',')}]`;
+  }
+
+  if (typeof value === 'object' && value !== null) {
+    if ('__variable' in value) {
+      const v = value as { __variable: unknown };
+      return typeof v.__variable === 'string' ? `$${v.__variable}` : '$';
+    }
+
+    const entries = Object.entries(value as Record<string, unknown>).sort(([a], [b]) =>
+      a.localeCompare(b),
+    );
+    return `{${entries.map(([k, v]) => `${k}:${serializeArgumentValue(v)}`).join(',')}}`;
+  }
+
+  return JSON.stringify(String(value));
 }
 
 /**

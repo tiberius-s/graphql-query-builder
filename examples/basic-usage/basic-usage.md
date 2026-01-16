@@ -1,6 +1,6 @@
 # Basic Usage
 
-This guide explains the core workflow for preventing server-side overfetching in GraphQL resolvers.
+This guide shows the core workflow for preventing server-side overfetching in GraphQL resolvers when your API forwards requests to an upstream GraphQL service.
 
 ## The Problem
 
@@ -40,6 +40,12 @@ configure({
 // Enable caching for performance
 initializeCache({ maxSize: 500, ttl: 60000 });
 ```
+
+Notes:
+
+- `requiredFields` are always included (even if the client didn’t ask for them).
+- `blockedFields` should never be sent upstream.
+- `fieldMappings` translate service field names to upstream field names during query building.
 
 ## Step 2: Extract Fields in Resolver
 
@@ -86,10 +92,12 @@ const userResolver = async (_parent, args, context, info) => {
   const { query, variables } = buildQueryCached('user', fields, {
     operationName: 'GetUser',
     variables: { id: args.id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
   });
 
   console.log('Generated query:', query);
-  // query GetUser($id: ID!) { user { id email } }
+  // query GetUser($id: ID!) { user(id: $id) { id email } }
 };
 ```
 
@@ -106,6 +114,8 @@ const userResolver = async (_parent, args, context, info) => {
   const { query, variables } = buildQueryCached('user', fields, {
     operationName: 'GetUser',
     variables: { id: args.id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
   });
 
   // Send optimized query to upstream
@@ -144,6 +154,8 @@ const userResolver = async (
   const { query, variables } = buildQueryCached('user', fields, {
     operationName: 'GetUser',
     variables: { id: args.id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
   });
 
   // 4. Send to upstream
@@ -172,11 +184,14 @@ const fields = [
 const { query } = buildQuery('product', fields, {
   operationName: 'GetProduct',
   variables: { id: '123' },
+  variableTypes: { id: 'ID!' },
+  rootArguments: { id: { __variable: 'id' } },
 });
 ```
 
 ## Next Steps
 
-- [Caching](caching/caching.md) - Improve performance with query caching
-- [Validation](validation/validation.md) - Protect against abuse with field validation
-- [Schema Mapping](./schema-mapping-zod/schema-mapping-zod.md) - Handle schema differences
+- [Caching](../caching/caching.md) - Improve performance with query caching
+- [Validation](../validation/validation.md) - Protect against abuse with field validation
+- [Schema Mapping with Zod](../schema-mapping-zod/schema-mapping-zod.md) - Handle schema differences with bidirectional codecs
+- [Schema Mapping with Generic Functions](../schema-mapping-generic/schema-mapping-generic.md) - Handle schema differences without external dependencies

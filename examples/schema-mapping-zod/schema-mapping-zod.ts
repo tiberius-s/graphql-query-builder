@@ -111,6 +111,8 @@ export async function getUser(
   const { query, variables } = buildQuery('user', fields, {
     operationName: 'GetUpstreamUser',
     variables: { id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
     fieldMappings,
   });
   const upstreamUser = await ctx.dataSources.users.getUserById(query, variables);
@@ -126,6 +128,8 @@ export async function getUsers(
   const { query, variables } = buildQuery('users', fields, {
     operationName: 'GetUpstreamUsers',
     variables: { ids },
+    variableTypes: { ids: '[ID!]!' },
+    rootArguments: { ids: { __variable: 'ids' } },
     fieldMappings,
   });
   const upstreamUsers = await ctx.dataSources.users.getUsers(query, variables);
@@ -159,8 +163,11 @@ export async function updateUser(
   if (input.isActive !== undefined) upstreamInput.status = upstreamUser.status;
 
   const { query: mutation, variables } = buildQuery('updateUser', fields, {
+    operationType: 'mutation',
     operationName: 'UpdateUpstreamUser',
     variables: { id, input: upstreamInput },
+    variableTypes: { id: 'ID!', input: 'UpdateUserInput!' },
+    rootArguments: { id: { __variable: 'id' }, input: { __variable: 'input' } },
     fieldMappings,
   });
 
@@ -185,8 +192,11 @@ export async function createUser(
   const { id: _id, createdTimestamp: _ts, ...upstreamInput } = upstreamUser;
 
   const { query: mutation, variables } = buildQuery('createUser', fields, {
+    operationType: 'mutation',
     operationName: 'CreateUpstreamUser',
     variables: { input: upstreamInput },
+    variableTypes: { input: 'CreateUserInput!' },
+    rootArguments: { input: { __variable: 'input' } },
     fieldMappings,
   });
 

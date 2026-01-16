@@ -47,6 +47,8 @@ const userResolver = async (
   const { query, variables } = buildQueryCached('user', fields, {
     operationName: 'GetUser',
     variables: { id: args.id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
   });
 
   // 4. Send the optimized query to the upstream GraphQL service
@@ -69,10 +71,12 @@ function buildProductListingQuery(productId: string) {
   return buildQuery('product', fields, {
     operationName: 'GetProduct',
     variables: { id: productId },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
   });
 }
 
 // Usage
 const { query } = buildProductListingQuery('123');
 console.log('Generated query:', query);
-// Output: query GetProduct { product { id name price inventory { available } } }
+// Output: query GetProduct($id: ID!) { product(id: $id) { id name price inventory { available } } }

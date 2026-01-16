@@ -1,84 +1,37 @@
 # Schema Mapping with Zod
 
-When building a GraphQL service that communicates with an upstream GraphQL service, you often encounter schema mismatches. This guide shows how to handle bidirectional schema translation using Zod 4's codec pattern for both queries and mutations.
+This guide shows how to proxy a GraphQL API to an upstream GraphQL service when the two schemas don't match.
 
-## The Problem
+You'll use two tools together:
 
-You need two types of transformations:
+- **Field mappings** translate field *names* while building the upstream operation.
+- **Zod codecs** translate field *values* while decoding responses (and encoding mutation inputs).
 
-1. **Field name mapping** (for building queries/mutations): `email` → `emailAddress`
-2. **Data transformation** (for requests and responses):
-   - **decode**: upstream → service (query/mutation responses)
-   - **encode**: service → upstream (mutation inputs)
+The full working example is in [schema-mapping-zod.ts](./schema-mapping-zod.ts).
 
-These are fundamentally different operations and must be handled separately.
+## Why This Pattern Works
 
-Your service schema:
+There are two distinct problems:
 
-```typescript
-interface ServiceUser {
-  id: string;
-  email: string;
-  name: string;
-  profile: {
-    bio: string;
-    avatarUrl: string | null;
-    location: string | null;
-  };
-  friends: string[]; // Array of user IDs
-  createdAt: Date;
-  isActive: boolean;
-}
-```
+1. **Names**: Build an upstream GraphQL document with different field names (for example `email` -> `emailAddress`).
+2. **Values**: Convert upstream JSON into your service types (for example `createdTimestamp` -> `createdAt: Date`).
 
-Upstream service schema:
+Field mappings solve (1). Codecs solve (2). They aren't interchangeable.
 
-```typescript
-interface UpstreamUser {
-  id: string;
-  emailAddress: string;
-  fullName: string;
-  userProfile: {
-    biography: string;
-    profileImageUrl: string | null;
-    userLocation: string | null;
-  };
-  friendIds: string[];
-  createdTimestamp: string;
-  status: 'active' | 'inactive' | 'suspended';
-}
-```
+## Step 1: Define Service and Upstream Schemas
 
-You need to:
-
-1. Translate field names in queries (service → upstream) - **Field mappings**
-2. Transform response data (upstream → service) - **Zod codec**
-3. Handle nested objects and arrays
-
-## The Solution: Zod Codecs + Field Mappings
-
-**Zod codecs** handle bidirectional data transformation:
-
-- `decode`: upstream → service (transforms response values for queries and mutations)
-- `encode`: service → upstream (transforms input values for mutations)
-
-**Field mappings** handle query/mutation building:
-
-- Plain object mapping service field names to upstream field names
-- Passed to `buildQuery()` for both queries and mutations
-
-## Step 1: Define Schemas
+Define both schemas using Zod. In the example, this is done via `ServiceUserSchema` and `UpstreamUserSchema`.
 
 ```typescript
 import * as z from 'zod';
 
-const ServiceProfileSchema = z.object({
+export const ServiceProfileSchema = z.object({
   bio: z.string(),
   avatarUrl: z.string().url().nullable(),
   location: z.string().nullable(),
 });
 
-const ServiceUserSchema = z.object({
+export const ServiceUserSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   name: z.string(),
@@ -88,13 +41,15 @@ const ServiceUserSchema = z.object({
   isActive: z.boolean(),
 });
 
-const UpstreamProfileSchema = z.object({
+export type ServiceUser = z.infer<typeof ServiceUserSchema>;
+
+export const UpstreamProfileSchema = z.object({
   biography: z.string(),
   profileImageUrl: z.string().nullable(),
   userLocation: z.string().nullable(),
 });
 
-const UpstreamUserSchema = z.object({
+export const UpstreamUserSchema = z.object({
   id: z.string(),
   emailAddress: z.string(),
   fullName: z.string(),
@@ -103,12 +58,19 @@ const UpstreamUserSchema = z.object({
   createdTimestamp: z.string(),
   status: z.enum(['active', 'inactive', 'suspended']),
 });
+
+export type UpstreamUser = z.infer<typeof UpstreamUserSchema>;
 ```
 
-## Step 2: Create the Codecs
+## Step 2: Create a Codec
+
+Use a codec to define bidirectional transforms:
+
+- `decode(upstream)` for query/mutation responses
+- `encode(service)` for mutation inputs
 
 ```typescript
-const ProfileCodec = z.codec(UpstreamProfileSchema, ServiceProfileSchema, {
+export const ProfileCodec = z.codec(UpstreamProfileSchema, ServiceProfileSchema, {
   decode: (upstream) => ({
     bio: upstream.biography,
     avatarUrl: upstream.profileImageUrl,
@@ -122,7 +84,7 @@ const ProfileCodec = z.codec(UpstreamProfileSchema, ServiceProfileSchema, {
   }),
 });
 
-const UserCodec = z.codec(UpstreamUserSchema, ServiceUserSchema, {
+export const UserCodec = z.codec(UpstreamUserSchema, ServiceUserSchema, {
   decode: (upstream) => ({
     id: upstream.id,
     email: upstream.emailAddress,
@@ -147,13 +109,10 @@ const UserCodec = z.codec(UpstreamUserSchema, ServiceUserSchema, {
 
 ## Step 3: Define Field Mappings
 
-Field mappings must be maintained separately from the codec because they serve different purposes:
-
-- **Codecs** transform VALUES (data transformation)
-- **Field mappings** translate NAMES (query building)
+Field mappings translate the GraphQL **field names** used in the query document.
 
 ```typescript
-const fieldMappings: Record<string, string> = {
+export const fieldMappings: Record<string, string> = {
   id: 'id',
   email: 'emailAddress',
   name: 'fullName',
@@ -167,229 +126,146 @@ const fieldMappings: Record<string, string> = {
 };
 ```
 
-## Step 4: Write Query Adapters
+## Step 4: Build Upstream Queries
+
+In your resolver adapter:
+
+1. Extract fields from `info`.
+2. Build the upstream query with `fieldMappings`.
+3. Provide root arguments via `rootArguments`.
+4. Decode the upstream response with the codec.
 
 ```typescript
-interface AppContext {
-  dataSources: {
-    users: {
-      getUserById: (query: string, variables: Record<string, unknown>) => Promise<UpstreamUser>;
-    };
-  };
-}
+import type { GraphQLResolveInfo } from 'graphql';
+import { extractFieldsFromInfo, buildQuery } from 'graphql-query-builder';
 
-async function getUser(
-  id: string,
-  ctx: AppContext,
-  info: GraphQLResolveInfo,
-): Promise<ServiceUser> {
-  // 1. Parse info - extract requested fields
+export async function getUser(id: string, ctx: AppContext, info: GraphQLResolveInfo) {
   const { fields } = extractFieldsFromInfo(info);
 
-  // 2. Build query - use field mappings for query building
   const { query, variables } = buildQuery('user', fields, {
     operationName: 'GetUpstreamUser',
     variables: { id },
-    fieldMappings, // Translates field names in the query
-  });
-
-  // 3. Send request via datasource
-  const upstreamUser = await ctx.dataSources.users.getUserById(query, variables);
-
-  // 4. Decode response - use codec for data transformation
-  const serviceUser = UserCodec.decode(upstreamUser);
-
-  //  getUsers: (query: string, variables: Record<string, unknown>) => Promise<UpstreamUser[]>;
-      updateUser: (mutation: string, variables: Record<string, unknown>) => Promise<UpstreamUser>;
-      createUser: (mutation: string, variables: Record<string, unknown>) => Promise<UpstreamUser>;
-    };
-  };
-}
-
-async function getUser(
-  id: string,
-  ctx: AppContext,
-  info: GraphQLResolveInfo,
-): Promise<ServiceUser> {
-  const { fields } = extractFieldsFromInfo(info);
-  const { query, variables } = buildQuery('user', fields, {
-    operationName: 'GetUpstreamUser',
-    variables: { id },
+    variableTypes: { id: 'ID!' },
+    rootArguments: { id: { __variable: 'id' } },
     fieldMappings,
   });
+
   const upstreamUser = await ctx.dataSources.users.getUserById(query, variables);
   return UserCodec.decode(upstreamUser);
 }
+```
 
-async function getUsers(
-  ids: string[],
-  ctx: AppContext,
-  info: GraphQLResolveInfo,
-): Promise<ServiceUser[]> {
+If you also support a list query (like `users(ids: [ID!]!)`), it looks the same:
+
+```typescript
+export async function getUsers(ids: string[], ctx: AppContext, info: GraphQLResolveInfo) {
   const { fields } = extractFieldsFromInfo(info);
+
   const { query, variables } = buildQuery('users', fields, {
     operationName: 'GetUpstreamUsers',
     variables: { ids },
+    variableTypes: { ids: '[ID!]!' },
+    rootArguments: { ids: { __variable: 'ids' } },
     fieldMappings,
   });
+
   const upstreamUsers = await ctx.dataSources.users.getUsers(query, variables);
   return upstreamUsers.map((upstreamUser) => UserCodec.decode(upstreamUser));
 }
 ```
 
-## Step 5: Write Mutation Adapters
+## Step 5: Build Upstream Mutations
 
-Mutations use `encode()` to transform service input to upstream format:
-users: (
-\_parent: unknown,
-args: { ids: string[] },
-ctx: AppContext,
-info: GraphQLResolveInfo,
-): Promise<ServiceUser[]> => getUsers(args.ids, ctx, info),
-},
-Mutation: {
-updateUser: (
-\_parent: unknown,
-args: { id: string; input: Partial<ServiceUser> },
-ctx: AppContext,
-info: GraphQLResolveInfo,
-): Promise<ServiceUser> => updateUser(args.id, args.input, ctx, info),
-createUser: (
-\_parent: unknown,
-args: { input: Omit<ServiceUser, 'id' | 'createdAt'> },
-ctx: AppContext,
-info: GraphQLResolveInfo,
-): Promise<ServiceUser> => createUser(args.input, ctx, info),
-},
-};
+Mutations usually need both directions:
 
-````
-
-## Key Concepts
-
-### Why Separate Field Mappings and Codecs?
-
-Field mappings and codecs serve fundamentally different purposes:
-
-- **Field mappings**: Translate field NAMES at query construction time (`email` → `emailAddress`)
-- **Codecs**: Transform field VALUES at runtime (`status: 'active'` → `isActive: true`)
-
-These cannot be merged because:
-1. Field mappings happen before the query is sent (string manipulation)
-2. Codec transformations happen after the response is received (data transformation)
-
-### Bidirectional Transformation Flow
-
-**Queries** (decode only):
-1. Client requests fields → Extract fields from GraphQL info
-2. Build query with field mappings → Translate names
-3. Send query to upstream → Get response
-4. Decode response with codec → Transform values
-
-**Mutations** (encode + decode):
-1. Client sends input → Encode with codec → Transform service input to upstream format
-2. Build mutation with field mappings → Translate names
-3. Send mutation to upstream → Get response
-4. Decode response with codec → Transform values
-
-## Testing
-
-Create mock upstream data for unit tests:
+1. Encode service input to upstream input (`encode`).
+2. Build a `mutation` operation.
+3. Decode the upstream response (`decode`).
 
 ```typescript
-const testUser: ServiceUser = {
-  id: 'test-1',
-  email: 'test@example.com',
-  name: 'Test User',
-  profile: {
-    bio: 'Test bio',
-    avatarUrl: null,
-    location: 'Test City',
-  },
-  friends: ['user-2', 'user-3'],
-  createdAt: new Date(),
-  isActive: true,
-};
+export async function updateUser(
+  id: string,
+  input: Partial<ServiceUser>,
+  ctx: AppContext,
+  info: GraphQLResolveInfo,
+) {
+  const { fields } = extractFieldsFromInfo(info);
 
-const mockUpstream = UserCodec.encode(testUser);
-const decoded = UserCodec.decode(mockUpstream);
-console.log(decoded.email === testUser.email); // true
-````
+  // Encode a full upstream-shaped user, then pick only the fields you want to update.
+  const serviceUserForEncoding: ServiceUser = {
+    id,
+    email: input.email ?? '',
+    name: input.name ?? '',
+    profile: input.profile ?? { bio: '', avatarUrl: null, location: null },
+    friends: input.friends ?? [],
+    createdAt: input.createdAt ?? new Date(),
+    isActive: input.isActive ?? true,
+  };
+  const upstreamUser = UserCodec.encode(serviceUserForEncoding);
 
-## Complete Example
+  const upstreamInput: Partial<UpstreamUser> = {};
+  if (input.email !== undefined) upstreamInput.emailAddress = upstreamUser.emailAddress;
+  if (input.name !== undefined) upstreamInput.fullName = upstreamUser.fullName;
+  if (input.profile !== undefined) upstreamInput.userProfile = upstreamUser.userProfile;
+  if (input.friends !== undefined) upstreamInput.friendIds = upstreamUser.friendIds;
+  if (input.isActive !== undefined) upstreamInput.status = upstreamUser.status;
 
-See [schema-mapping-zod.ts](./schema-mapping-zod.ts) for the full implementation.
+  const { query: mutation, variables } = buildQuery('updateUser', fields, {
+    operationType: 'mutation',
+    operationName: 'UpdateUpstreamUser',
+    variables: { id, input: upstreamInput },
+    variableTypes: { id: 'ID!', input: 'UpdateUserInput!' },
+    rootArguments: { id: { __variable: 'id' }, input: { __variable: 'input' } },
+    fieldMappings,
+  });
 
-## Key Benefits
-
-1. **Bidirectional**: Handles both queries (decode) and mutations (encode)
-2. **Type Safety**: Zod provides runtime validation and type inference
-3. **Nested Objects & Arrays**: Handles complex structures with nested codecs
-4. **Clear Separation**: Field mappings (names) vs codecs (values)
-5. **Production Ready**: encode() is used for real mutations, not just tes
-   const { fields } = extractFieldsFromInfo(info);
-
-const serviceUserForEncoding: ServiceUser = {
-id: '',
-...input,
-createdAt: new Date(),
-};
-const upstreamUser = UserCodec.encode(serviceUserForEncoding);
-
-const { id: \_id, createdTimestamp: \_ts, ...upstreamInput } = upstreamUser;
-
-const { query: mutation, variables } = buildQuery('createUser', fields, {
-operationName: 'CreateUpstreamUser',
-variables: { input: upstreamInput },
-fieldMappings,
-});
-
-const createdUpstreamUser = await ctx.dataSources.users.createUser(mutation, variables);
-return UserCodec.decode(createdUpstreamUser);
+  const updatedUpstreamUser = await ctx.dataSources.users.updateUser(mutation, variables);
+  return UserCodec.decode(updatedUpstreamUser);
 }
-
 ```
 
-## Step 6'Test bio',
-    avatarUrl: null,
-    location: 'Test City',
-  },
-  friends: ['user-2', 'user-3'],
-  createdAt: new Date(),
-  isActive: true,
-};
+Creating a user is typically the same idea: encode, strip upstream-only fields, then build a mutation.
 
-// Create mock upstream response
-const mockUpstream = UserCodec.encode(testUser);
+```typescript
+export async function createUser(input: Omit<ServiceUser, 'id' | 'createdAt'>, ctx: AppContext, info: GraphQLResolveInfo) {
+  const { fields } = extractFieldsFromInfo(info);
 
-// Verify round-trip
-const decoded = UserCodec.decode(mockUpstream);
-console.log(decoded.email === testUser.email); // true
+  const serviceUserForEncoding: ServiceUser = {
+    id: '',
+    ...input,
+    createdAt: new Date(),
+  };
+  const upstreamUser = UserCodec.encode(serviceUserForEncoding);
 
-// Show auto-derived field mappings
-console.log(fieldMappings);
-// { id: 'id', email: 'emailAddress', name: 'fullName', ... }
+  const { id: _id, createdTimestamp: _ts, ...upstreamInput } = upstreamUser;
+
+  const { query: mutation, variables } = buildQuery('createUser', fields, {
+    operationType: 'mutation',
+    operationName: 'CreateUpstreamUser',
+    variables: { input: upstreamInput },
+    variableTypes: { input: 'CreateUserInput!' },
+    rootArguments: { input: { __variable: 'input' } },
+    fieldMappings,
+  });
+
+  const createdUpstreamUser = await ctx.dataSources.users.createUser(mutation, variables);
+  return UserCodec.decode(createdUpstreamUser);
+}
 ```
 
-## Complete Example
+`UpdateUserInput!` and `CreateUserInput!` are example variable types - use the input type names from your upstream schema.
 
-See [schema-mapping-zod.ts](./schema-mapping-zod.ts) for the full implementation.
+## Testing Tip
 
-## Key Benefits
+If you want upstream-shaped mocks in tests, create them by encoding a service object:
 
-1. **Single Source of Truth**: The codec contains ALL transformation logic
-2. **Auto-Derived Mappings**: Field mappings are derived automatically from the codec
-3. **Type Safety**: Zod provides runtime validation and type inference
-4. **Nested Objects & Arrays**: Handles complex structures with nested codecs
-5. **No Manual Duplication**: No need to maintain separate field mapping objects
+```typescript
+export function createMockUpstreamUser(serviceUser: ServiceUser): UpstreamUser {
+  return UserCodec.encode(serviceUser);
+}
+```
 
-## When to Use This Pattern
+## Next Steps
 
-Use Zod codecs when:
-
-- You need runtime validation
-- You want type inference from schemas
-- You prefer a single source of truth for transformations
-- You have complex nested objects and arrays
-
-For simpler cases without external dependencies, see the [Generic Schema Mapping](../schema-mapping-generic/schema-mapping-generic.md) guide.
+- See the full implementation in [schema-mapping-zod.ts](./schema-mapping-zod.ts)
+- For a no-dependencies approach, see [Schema Mapping with Generic Functions](../schema-mapping-generic/schema-mapping-generic.md)
