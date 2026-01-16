@@ -32,7 +32,7 @@
     "dev": "tsup --watch",
     "test": "vitest run src/",
     "test:watch": "vitest",
-    "test:cov": "vitest run --coverage",
+    "test:cov": "vitest run --coverage src/",
     "test:ci": "vitest run test/",
     "lint": "biome lint src",
     "lint:fix": "biome lint --write src",

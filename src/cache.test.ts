@@ -267,6 +267,193 @@ describe('Cache Module', () => {
       expect(getCachedQuery('key')).toBeUndefined();
     });
   });
+
+  describe('serializeArgumentValue edge cases', () => {
+    it('should handle nested objects with variables', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, {
+        rootArguments: {
+          input: {
+            nested: {
+              variable: { __variable: 'varName' },
+            },
+          },
+        },
+      });
+
+      const key2 = generateCacheKey('user', fields, {
+        rootArguments: {
+          input: {
+            nested: {
+              variable: { __variable: 'differentVar' },
+            },
+          },
+        },
+      });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should handle arrays with nested objects', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, {
+        rootArguments: {
+          items: [{ id: '1' }, { id: '2' }],
+        },
+      });
+
+      const key2 = generateCacheKey('user', fields, {
+        rootArguments: {
+          items: [{ id: '1' }, { id: '3' }],
+        },
+      });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should handle mixed types in rootArguments', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key = generateCacheKey('user', fields, {
+        rootArguments: {
+          stringVal: 'test',
+          numberVal: 42,
+          boolVal: true,
+          nullVal: null,
+          arrayVal: [1, 'two', false],
+        },
+      });
+
+      expect(key).toMatch(/^[a-f0-9]{32}$/);
+    });
+
+    it('should handle variable references with null value', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, {
+        rootArguments: {
+          value: { __variable: null },
+        },
+      });
+
+      const key2 = generateCacheKey('user', fields, {
+        rootArguments: {
+          value: { __variable: 'id' },
+        },
+      });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should handle empty objects and arrays', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, {
+        rootArguments: { obj: {}, arr: [] },
+      });
+
+      const key2 = generateCacheKey('user', fields, {
+        rootArguments: { obj: { a: 1 }, arr: [1] },
+      });
+
+      expect(key1).not.toBe(key2);
+    });
+
+    it('should handle deeply nested objects', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const deepObj = {
+        level1: {
+          level2: {
+            level3: {
+              value: { __variable: 'deepVar' },
+            },
+          },
+        },
+      };
+
+      const key = generateCacheKey('user', fields, {
+        rootArguments: deepObj,
+      });
+
+      expect(key).toMatch(/^[a-f0-9]{32}$/);
+    });
+  });
+
+  describe('serializeOptions with all combinations', () => {
+    it('should include all option types in key', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key = generateCacheKey('user', fields, {
+        operationName: 'GetUser',
+        operationType: 'mutation',
+        variableTypes: { id: 'ID!', input: 'UpdateInput!' },
+        rootArguments: { id: { __variable: 'id' }, input: { __variable: 'input' } },
+        fieldMappings: { email: 'emailAddress', name: 'fullName' },
+        requiredFields: ['id', 'version'],
+      });
+
+      expect(key).toMatch(/^[a-f0-9]{32}$/);
+    });
+
+    it('should handle empty collections in options', () => {
+      const fields: FieldSelection[] = [{ name: 'id', path: ['id'], depth: 1 }];
+
+      const key1 = generateCacheKey('user', fields, {
+        variableTypes: {},
+        rootArguments: {},
+        fieldMappings: {},
+        requiredFields: [],
+      });
+
+      const key2 = generateCacheKey('user', fields, {
+        variableTypes: { id: 'ID!' },
+      });
+
+      expect(key1).not.toBe(key2);
+    });
+  });
+
+  describe('cache eviction and TTL edge cases', () => {
+    it('should not cache when cache is disabled', () => {
+      disableCache();
+      setCachedQuery('key', mockQuery());
+
+      // When disabled, cache is null, so setCachedQuery does nothing
+      initializeCache({ maxSize: 1 });
+      expect(getCachedQuery('key')).toBeUndefined();
+    });
+
+    it('should handle multiple TTL expirations', async () => {
+      initializeCache({ maxSize: 10, ttl: 30 });
+
+      setCachedQuery('key1', mockQuery());
+      setCachedQuery('key2', mockQuery());
+
+      expect(getCachedQuery('key1')).toBeDefined();
+      expect(getCachedQuery('key2')).toBeDefined();
+
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(getCachedQuery('key1')).toBeUndefined();
+      expect(getCachedQuery('key2')).toBeUndefined();
+    });
+
+    it('should handle cache stats with only misses', () => {
+      clearCache();
+
+      getCachedQuery('missing1');
+      getCachedQuery('missing2');
+      getCachedQuery('missing3');
+
+      const stats = getCacheStats();
+      expect(stats.hits).toBe(0);
+      expect(stats.misses).toBe(3);
+      expect(stats.hitRatio).toBe(0);
+    });
+  });
 });
 
 function mockQuery(): BuiltQuery {
