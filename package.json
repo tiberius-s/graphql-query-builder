@@ -42,7 +42,10 @@
     "check:fix": "biome check --write src",
     "typecheck": "tsc --noEmit",
     "validate": "npm run build && attw --pack . && publint",
-    "prepublishOnly": "npm run validate"
+    "prepublishOnly": "npm run validate",
+    "docs": "typedoc",
+    "docs:watch": "typedoc --watch",
+    "docs:serve": "npx serve docs"
   },
   "keywords": [
     "graphql",
@@ -70,6 +73,7 @@
     "graphql-tag": "^2.12.6",
     "publint": "^0.3.16",
     "tsup": "^8.5.1",
+    "typedoc": "^0.28.16",
     "typescript": "^5.9.3",
     "vitest": "^4.0.17",
     "zod": "^4.3.5"

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": ["./src/index.ts"],
+  "out": "./docs",
+  "exclude": ["**/*.test.ts", "**/*.spec.ts", "**/test/**"],
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeExternals": true,
+  "readme": "./readme.md",
+  "plugin": [],
+  "navigation": {
+    "includeCategories": true,
+    "includeGroups": true
+  },
+  "categorizeByGroup": true,
+  "categoryOrder": [
+    "Query Building",
+    "Field Extraction",
+    "Configuration",
+    "Caching",
+    "Validation",
+    "Errors",
+    "*"
+  ],
+  "groupOrder": ["Functions", "Classes", "Interfaces", "Type Aliases", "*"],
+  "sort": ["source-order"],
+  "kindSortOrder": ["Function", "Class", "Interface", "TypeAlias", "Variable"],
+  "visibilityFilters": {
+    "protected": false,
+    "private": false,
+    "inherited": true,
+    "external": false
+  },
+  "searchInComments": true,
+  "cleanOutputDir": true,
+  "includeVersion": true,
+  "disableSources": false,
+  "sourceLinkTemplate": "https://github.com/tiberius-s/graphql-query-builder/blob/main/{path}#L{line}",
+  "gitRevision": "main",
+  "githubPages": true,
+  "hideGenerator": false,
+  "includeHierarchySummary": true
+}

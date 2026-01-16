@@ -55,17 +55,37 @@ const DEFAULT_CONFIG: QueryBuilderConfig = {
 let currentConfig: QueryBuilderConfig = { ...DEFAULT_CONFIG };
 
 /**
- * Configures the query builder with the given options.
+ * Configures the query builder with global settings.
+ *
+ * Configuration includes security limits (depth, field count), field mappings,
+ * blocked fields, and required fields. Settings are validated before being applied.
+ *
+ * @param options - Configuration options to apply
+ * @param options.maxDepth - Maximum query nesting depth allowed (must be >= 1)
+ * @param options.maxFields - Maximum number of fields per query (must be >= 1)
+ * @param options.blockedFields - Fields that should never be included in queries
+ * @param options.requiredFields - Fields that should always be included
+ * @param options.fieldMappings - Field name translations (local -> upstream)
+ *
+ * @throws {ConfigurationError} If any configuration value is invalid
  *
  * @example
  * ```typescript
  * configure({
  *   maxDepth: 5,
  *   maxFields: 50,
- *   blockedFields: ['password', 'ssn'],
- *   requiredFields: ['id'],
+ *   blockedFields: ['password', 'ssn', 'creditCard'],
+ *   requiredFields: ['id', 'version'],
+ *   fieldMappings: { email: 'emailAddress', name: 'fullName' }
  * });
  * ```
+ *
+ * @remarks
+ * Configuration is global and affects all subsequent query building operations.
+ * Call this once at application startup.
+ *
+ * @see {@link getConfig} to retrieve current configuration
+ * @see {@link resetConfig} to restore defaults
  */
 export function configure(options: Partial<QueryBuilderConfig>): void {
   if (
@@ -94,33 +114,80 @@ export function configure(options: Partial<QueryBuilderConfig>): void {
 }
 
 /**
- * Gets the current configuration.
+ * Retrieves the current query builder configuration.
+ *
+ * @returns A copy of the current configuration object
+ *
+ * @example
+ * ```typescript
+ * const config = getConfig();
+ * console.log(`Max depth: ${config.maxDepth}`);
+ * console.log(`Blocked fields: ${config.blockedFields.join(', ')}`);
+ * ```
+ *
+ * @remarks
+ * Returns a copy to prevent external modification. Use {@link configure}
+ * to change configuration settings.
+ *
+ * @see {@link configure} to update configuration
  */
 export function getConfig(): QueryBuilderConfig {
   return { ...currentConfig };
 }
 
 /**
- * Resets the configuration to defaults.
+ * Resets configuration to default values.
+ *
+ * Default configuration:
+ * - maxDepth: 10
+ * - maxFields: 100
+ * - blockedFields: []
+ * - requiredFields: []
+ * - fieldMappings: {}
+ *
+ * @example
+ * ```typescript
+ * resetConfig();
+ * ```
+ *
+ * @see {@link configure} to apply custom configuration
  */
 export function resetConfig(): void {
   currentConfig = { ...DEFAULT_CONFIG };
 }
 
 /**
- * Validates field selections against configured limits.
+ * Validates field selections against configured security limits.
+ *
+ * Checks for:
+ * - Query depth exceeding maxDepth
+ * - Field count exceeding maxFields
+ * - Presence of blocked fields
  *
  * @param fields - The field selections to validate
  * @param options - Optional overrides for validation limits
- * @returns Validation result with any errors
+ * @param options.maxDepth - Override global maxDepth for this validation
+ * @param options.maxFields - Override global maxFields for this validation
+ * @param options.blockedFields - Override global blockedFields for this validation
+ * @returns Validation result containing validity flag and error messages
  *
  * @example
  * ```typescript
  * const result = validateFields(extractedFields);
  * if (!result.valid) {
+ *   console.error('Validation errors:', result.errors);
  *   throw new Error(result.errors.join(', '));
  * }
  * ```
+ *
+ * @example
+ * ```typescript
+ * // Validate with stricter limits for this request
+ * const result = validateFields(fields, { maxDepth: 3, maxFields: 20 });
+ * ```
+ *
+ * @see {@link assertValid} for throwing validation errors
+ * @see {@link configure} to set global validation limits
  */
 export function validateFields(
   fields: FieldSelection[],
@@ -167,11 +234,28 @@ export function validateFields(
 }
 
 /**
- * Validates field selections and throws if invalid.
+ * Validates field selections and throws an error if validation fails.
+ *
+ * This is a convenience wrapper around {@link validateFields} that throws
+ * instead of returning a validation result object.
  *
  * @param fields - The field selections to validate
  * @param options - Optional overrides for validation limits
- * @throws QueryValidationError if validation fails
+ * @throws {QueryValidationError} If validation fails, with detailed error messages
+ *
+ * @example
+ * ```typescript
+ * try {
+ *   assertValid(extractedFields);
+ *   // Proceed with query building
+ * } catch (error) {
+ *   if (error instanceof QueryValidationError) {
+ *     console.error('Invalid query:', error.errors);
+ *   }
+ * }
+ * ```
+ *
+ * @see {@link validateFields} for non-throwing validation
  */
 export function assertValid(fields: FieldSelection[], options: ValidationOptions = {}): void {
   const result = validateFields(fields, options);
@@ -184,11 +268,33 @@ export function assertValid(fields: FieldSelection[], options: ValidationOptions
 }
 
 /**
- * Removes blocked fields from field selections.
+ * Removes blocked fields from field selections recursively.
+ *
+ * This function filters out any fields that match the blocked fields list,
+ * traversing nested selections to ensure complete sanitization.
  *
  * @param fields - The field selections to sanitize
- * @param blockedFields - Optional override for blocked fields list
- * @returns Sanitized field selections
+ * @param blockedFields - Optional override for the blocked fields list
+ * @returns New array of field selections with blocked fields removed
+ *
+ * @example
+ * ```typescript
+ * const sanitized = sanitizeFields(extractedFields);
+ * // All password, ssn, etc. fields are removed
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Use custom blocked list for this operation
+ * const sanitized = sanitizeFields(fields, ['internalId', 'deletedAt']);
+ * ```
+ *
+ * @remarks
+ * - Field name matching is case-insensitive
+ * - Returns a new array; does not modify the input
+ * - Blocked fields in nested selections are also removed
+ *
+ * @see {@link configure} to set global blocked fields list
  */
 export function sanitizeFields(
   fields: FieldSelection[],

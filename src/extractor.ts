@@ -211,13 +211,26 @@ function convertFieldsByTypeName(
 }
 
 /**
- * Gets just the field names as a flat array.
+ * Extracts all requested field names as a flat array.
+ *
+ * This is a convenience function that extracts fields and flattens them
+ * into a simple array of field names, useful for quick checks or logging.
+ *
+ * @param info - The GraphQL resolver info object
+ * @param options - Extraction options (maxDepth, excludeFields, etc.)
+ * @returns Array of all requested field names (including nested fields)
  *
  * @example
  * ```typescript
- * const fieldNames = getRequestedFieldNames(info);
- * // ['id', 'name', 'email']
+ * const resolver = (parent, args, context, info) => {
+ *   const fieldNames = getRequestedFieldNames(info);
+ *   console.log('Requested fields:', fieldNames);
+ *   // ['id', 'name', 'email', 'profile', 'bio', 'avatar']
+ * };
  * ```
+ *
+ * @see {@link extractFieldsFromInfo} for structured field extraction
+ * @see {@link isFieldRequested} to check for specific field paths
  */
 export function getRequestedFieldNames(
   info: GraphQLResolveInfo,
@@ -237,14 +250,42 @@ function flattenFieldNames(fields: FieldSelection[]): string[] {
 }
 
 /**
- * Checks if a specific field path was requested.
+ * Checks if a specific field path was requested in the query.
+ *
+ * Useful for conditionally fetching data or performing operations only when
+ * specific fields are requested. Supports dot-notation paths for nested fields.
+ *
+ * @param info - The GraphQL resolver info object
+ * @param fieldPath - Dot-notation path to the field (e.g., 'user.profile.avatar')
+ * @param options - Extraction options
+ * @returns `true` if the field path was requested, `false` otherwise
  *
  * @example
  * ```typescript
- * if (isFieldRequested(info, 'user.profile.avatar')) {
- *   // Fetch avatar data
- * }
+ * const resolver = async (parent, args, context, info) => {
+ *   const user = await fetchUser(args.id);
+ *
+ *   // Only fetch avatar if it was requested
+ *   if (isFieldRequested(info, 'avatar')) {
+ *     user.avatar = await fetchAvatar(user.id);
+ *   }
+ *
+ *   // Check for nested field
+ *   if (isFieldRequested(info, 'profile.bio')) {
+ *     user.profile = await fetchProfile(user.id);
+ *   }
+ *
+ *   return user;
+ * };
  * ```
+ *
+ * @remarks
+ * - Field names must match exactly (case-sensitive)
+ * - For nested fields, all intermediate paths must exist
+ * - Does not consider field aliases
+ *
+ * @see {@link extractFieldsFromInfo} for full field structure
+ * @see {@link getRequestedFieldNames} for all field names
  */
 export function isFieldRequested(
   info: GraphQLResolveInfo,

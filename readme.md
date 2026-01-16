@@ -90,6 +90,24 @@ const stats = getCacheStats();
 console.log(`Cache hit ratio: ${(stats.hitRatio * 100).toFixed(1)}%`);
 ```
 
+## Documentation
+
+📚 **[Full API Documentation](https://tiberius-s.github.io/graphql-query-builder/)**
+
+Complete TypeDoc-generated API documentation is available online, including:
+
+- Detailed function signatures and parameters
+- Comprehensive examples and use cases
+- Type definitions and interfaces
+- Architecture and design patterns
+
+To generate documentation locally:
+
+```bash
+npm run docs        # Generate docs in ./docs
+npm run docs:serve  # View docs at http://localhost:3000
+```
+
 ## API Reference
 
 ### Field Extraction

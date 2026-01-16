@@ -129,8 +129,34 @@ export function buildQuery(
 }
 
 /**
- * Builds a GraphQL query with caching.
- * Uses MD5 hashing for efficient cache key comparison.
+ * Builds a GraphQL query with caching enabled.
+ *
+ * This function uses MD5 hashing to generate a cache key based on the root field,
+ * field selections, and options. If a cached result exists, it returns the cached
+ * query string while preserving the current variables.
+ *
+ * Cache hits avoid expensive query string generation, making this ideal for
+ * high-throughput scenarios with repeated query patterns.
+ *
+ * @param rootField - The root field to query (e.g., 'user', 'product')
+ * @param fields - The extracted field selections from the client request
+ * @param options - Build options including variables, operation name, etc.
+ * @returns The built query with metadata (may be from cache)
+ *
+ * @example
+ * ```typescript
+ * initializeCache({ maxSize: 1000, ttl: 60000 });
+ *
+ * const { query, variables } = buildQueryCached('user', fields, {
+ *   operationName: 'GetUser',
+ *   variables: { id: args.id },
+ *   rootArguments: { id: { __variable: 'id' } }
+ * });
+ * // Subsequent calls with identical structure will use cached query
+ * ```
+ *
+ * @see {@link buildQuery} for non-cached query building
+ * @see {@link initializeCache} to configure cache behavior
  */
 export function buildQueryCached(
   rootField: string,
@@ -154,12 +180,33 @@ export function buildQueryCached(
 }
 
 /**
- * Builds a query from field paths (dot-separated strings).
+ * Builds a GraphQL query from simple field path strings.
+ *
+ * This is a convenience method for when you have a simple array of dot-notation
+ * field paths instead of a full field selection tree. Useful for programmatic
+ * query generation or when working with simple field lists.
+ *
+ * @param rootField - The root field to query (e.g., 'user', 'product')
+ * @param paths - Array of dot-notation field paths (e.g., ['name', 'email', 'profile.bio'])
+ * @param options - Build options including variables, operation name, etc.
+ * @returns The built query with metadata
  *
  * @example
  * ```typescript
- * const { query } = buildQueryFromPaths('user', ['id', 'email', 'profile.avatar']);
+ * const { query } = buildQueryFromPaths('user', [
+ *   'id',
+ *   'name',
+ *   'email',
+ *   'profile.bio',
+ *   'profile.avatar'
+ * ], {
+ *   operationName: 'GetUser',
+ *   variables: { id: '123' }
+ * });
+ * // Generates: query GetUser { user { id name email profile { bio avatar } } }
  * ```
+ *
+ * @see {@link buildQuery} for building from full field selections
  */
 export function buildQueryFromPaths(
   rootField: string,
@@ -171,7 +218,25 @@ export function buildQueryFromPaths(
 }
 
 /**
- * Builds a query from paths with caching.
+ * Builds a GraphQL query from field paths with caching enabled.
+ *
+ * Combines the convenience of path-based query building with the performance
+ * benefits of caching. Ideal for scenarios with repeated patterns.
+ *
+ * @param rootField - The root field to query (e.g., 'user', 'product')
+ * @param paths - Array of dot-notation field paths
+ * @param options - Build options including variables, operation name, etc.
+ * @returns The built query with metadata (may be from cache)
+ *
+ * @example
+ * ```typescript
+ * const { query } = buildQueryFromPathsCached('user', [
+ *   'id', 'name', 'profile.avatar'
+ * ], { operationName: 'GetUserBasic' });
+ * ```
+ *
+ * @see {@link buildQueryFromPaths} for non-cached path-based building
+ * @see {@link buildQueryCached} for cached query building from field selections
  */
 export function buildQueryFromPathsCached(
   rootField: string,
